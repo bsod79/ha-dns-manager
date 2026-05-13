@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from homeassistant.components.binary_sensor import BinarySensorDeviceClass, BinarySensorEntity
+from homeassistant.components.binary_sensor import BinarySensorEntity
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.core import HomeAssistant
 from homeassistant.helpers.entity_platform import AddEntitiesCallback
@@ -30,7 +30,9 @@ async def async_setup_entry(
 
 
 class RecordInSyncBinarySensor(DnsManagerEntity, BinarySensorEntity):
-    _attr_device_class = BinarySensorDeviceClass.CONNECTIVITY
+    """True when provider A record matches the expected IP (public or static)."""
+
+    _attr_has_entity_name = False
 
     def __init__(self, coordinator: DnsManagerCoordinator, entry: ConfigEntry, record_id: str) -> None:
         super().__init__(coordinator, entry)
@@ -49,7 +51,7 @@ class RecordInSyncBinarySensor(DnsManagerEntity, BinarySensorEntity):
         row = self._record_options_row()
         display = rs.name if rs else (str(row.get(CONF_RECORD_NAME, self.record_id)) if row else self.record_id)
         rtype = str(row.get(CONF_RECORD_TYPE, "A")) if row else "A"
-        return f"{display} ({rtype}) in sync"
+        return f"{display} ({rtype}) - in sync"
 
     @property
     def icon(self) -> str:
@@ -62,18 +64,33 @@ class RecordInSyncBinarySensor(DnsManagerEntity, BinarySensorEntity):
 
     @property
     def extra_state_attributes(self) -> dict[str, str] | None:
+        row = self._record_options_row()
         if not self.coordinator.data:
-            return None
+            if not row:
+                return None
+            return {
+                "record_id": self.record_id,
+                "record_name": str(row.get(CONF_RECORD_NAME, "")),
+                "record_type": str(row.get(CONF_RECORD_TYPE, "A")),
+                "poll_status": "pending",
+            }
         rs = self.coordinator.data.records.get(self.record_id)
         if not rs:
-            return None
-        row = self._record_options_row()
+            base: dict[str, str] = {
+                "record_id": self.record_id,
+                "record_type": str(row.get(CONF_RECORD_TYPE, "A")) if row else "A",
+                "poll_status": "missing_status",
+            }
+            if row:
+                base["record_name"] = str(row.get(CONF_RECORD_NAME, ""))
+            return base
         attrs: dict[str, str] = {
             "record_id": rs.record_id,
             "record_name": rs.name,
             "record_type": str(row.get(CONF_RECORD_TYPE, "A")) if row else "A",
             "current_ip": rs.current_ip,
             "expected_ip": rs.expected_ip,
+            "in_sync": str(rs.in_sync),
         }
         if rs.last_updated:
             attrs["last_updated"] = rs.last_updated.isoformat()

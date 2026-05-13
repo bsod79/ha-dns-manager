@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from homeassistant.components.button import ButtonEntity
 from homeassistant.config_entries import ConfigEntry
+from homeassistant.helpers.entity import EntityCategory
 from homeassistant.core import HomeAssistant
 from homeassistant.helpers.entity_platform import AddEntitiesCallback
 
@@ -31,6 +32,8 @@ async def async_setup_entry(
 
 
 class UpdateAllButton(DnsManagerEntity, ButtonEntity):
+    _attr_has_entity_name = False
+    _attr_entity_category = EntityCategory.CONFIG
     _attr_name = "Update all records"
     _attr_icon = "mdi:cloud-sync"
 
@@ -43,6 +46,8 @@ class UpdateAllButton(DnsManagerEntity, ButtonEntity):
 
 
 class UpdateRecordButton(DnsManagerEntity, ButtonEntity):
+    _attr_has_entity_name = False
+    _attr_entity_category = EntityCategory.CONFIG
     _attr_icon = "mdi:dns"
 
     def __init__(self, coordinator: DnsManagerCoordinator, entry: ConfigEntry, record_id: str) -> None:
