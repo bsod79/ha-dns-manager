@@ -32,15 +32,16 @@
     }
   },
   "options": {
-    "menu": {
-      "init": {
-        "general": "General settings",
-        "add_record_select": "Add managed record",
-        "edit_record_select": "Edit managed record",
-        "remove_record_select": "Remove managed record"
-      }
-    },
     "step": {
+      "init": {
+        "title": "DNS Manager",
+        "menu_options": {
+          "general": "General settings",
+          "add_record_select": "Add managed record",
+          "edit_record_select": "Edit managed record",
+          "remove_record_select": "Remove managed record"
+        }
+      },
       "general": {
         "title": "General settings",
         "data": {

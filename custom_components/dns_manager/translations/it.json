@@ -9,6 +9,17 @@
     }
   },
   "options": {
+    "step": {
+      "init": {
+        "title": "DNS Manager",
+        "menu_options": {
+          "general": "Impostazioni generali",
+          "add_record_select": "Aggiungi record gestito",
+          "edit_record_select": "Modifica record gestito",
+          "remove_record_select": "Rimuovi record gestito"
+        }
+      }
+    },
     "abort": {
       "no_managed_records": "Nessun record gestito al momento."
     }
