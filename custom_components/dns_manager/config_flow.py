@@ -23,6 +23,7 @@ from .const import (
     CONF_RECORDS,
     CONF_RECORD_ID,
     CONF_RECORD_NAME,
+    CONF_RECORD_TYPE,
     CONF_SCAN_INTERVAL,
     CONF_STATIC_IP,
     CONF_ZONE_ID,
@@ -39,6 +40,11 @@ from .providers.base import DnsRecord, ProviderConfig
 
 def _validate_ipv4(value: str) -> str:
     return str(ipaddress.IPv4Address(value))
+
+
+def _record_select_label(name: str, record_type: str) -> str:
+    """Human-readable label for record pickers (name + DNS type)."""
+    return f"{name} ({record_type})"
 
 
 class DnsManagerConfigFlow(config_entries.ConfigFlow, domain="dns_manager"):
@@ -215,7 +221,9 @@ class DnsManagerOptionsFlow(config_entries.OptionsFlow):
             else:
                 return await self.async_step_add_record_strategy()
 
-        rec_map = {r.record_id: r.name for r in self._records}
+        rec_map = {
+            r.record_id: _record_select_label(r.name, r.record_type) for r in self._records
+        }
         schema = vol.Schema({vol.Required(CONF_RECORD_ID): vol.In(rec_map)})
         return self.async_show_form(step_id="add_record_select", data_schema=schema, errors=errors)
 
@@ -226,6 +234,7 @@ class DnsManagerOptionsFlow(config_entries.OptionsFlow):
         record_id = str(self._selected_record_id)
         record = next((r for r in self._records if r.record_id == record_id), None)
         record_name = record.name if record else record_id
+        record_type = record.record_type if record else "A"
 
         if user_input is not None:
             try:
@@ -239,6 +248,7 @@ class DnsManagerOptionsFlow(config_entries.OptionsFlow):
                     {
                         CONF_RECORD_ID: record_id,
                         CONF_RECORD_NAME: record_name,
+                        CONF_RECORD_TYPE: record_type,
                         CONF_IP_MODE: ip_mode,
                         CONF_STATIC_IP: static_ip,
                         CONF_ENABLED: True,
@@ -275,7 +285,17 @@ class DnsManagerOptionsFlow(config_entries.OptionsFlow):
             return await self.async_step_edit_record_strategy()
 
         schema = vol.Schema(
-            {vol.Required(CONF_RECORD_ID): vol.In({r[CONF_RECORD_ID]: r[CONF_RECORD_NAME] for r in managed})}
+            {
+                vol.Required(CONF_RECORD_ID): vol.In(
+                    {
+                        r[CONF_RECORD_ID]: _record_select_label(
+                            str(r.get(CONF_RECORD_NAME, r[CONF_RECORD_ID])),
+                            str(r.get(CONF_RECORD_TYPE, "A")),
+                        )
+                        for r in managed
+                    }
+                )
+            }
         )
         return self.async_show_form(step_id="edit_record_select", data_schema=schema)
 
@@ -303,6 +323,7 @@ class DnsManagerOptionsFlow(config_entries.OptionsFlow):
                         {
                             CONF_RECORD_ID: r[CONF_RECORD_ID],
                             CONF_RECORD_NAME: r.get(CONF_RECORD_NAME),
+                            CONF_RECORD_TYPE: str(r.get(CONF_RECORD_TYPE, "A")),
                             CONF_IP_MODE: ip_mode,
                             CONF_STATIC_IP: static_ip,
                             CONF_ENABLED: enabled,
@@ -349,7 +370,17 @@ class DnsManagerOptionsFlow(config_entries.OptionsFlow):
             )
 
         schema = vol.Schema(
-            {vol.Required(CONF_RECORD_ID): vol.In({r[CONF_RECORD_ID]: r[CONF_RECORD_NAME] for r in managed})}
+            {
+                vol.Required(CONF_RECORD_ID): vol.In(
+                    {
+                        r[CONF_RECORD_ID]: _record_select_label(
+                            str(r.get(CONF_RECORD_NAME, r[CONF_RECORD_ID])),
+                            str(r.get(CONF_RECORD_TYPE, "A")),
+                        )
+                        for r in managed
+                    }
+                )
+            }
         )
         return self.async_show_form(step_id="remove_record_select", data_schema=schema)
 

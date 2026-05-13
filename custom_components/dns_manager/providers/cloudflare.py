@@ -114,6 +114,7 @@ class CloudflareProvider(DNSProvider):
                         record_id=str(record_id),
                         name=str(name),
                         current_ip=str(content),
+                        record_type=str(r.get("type", "A")),
                         proxied=bool(r.get("proxied", False)),
                         ttl=int(r.get("ttl", 1) or 1),
                     )
@@ -139,13 +140,14 @@ class CloudflareProvider(DNSProvider):
             record_id=str(result["id"]),
             name=str(result.get("name", "")),
             current_ip=str(result.get("content", "")),
+            record_type=str(result.get("type", "A")),
             proxied=bool(result.get("proxied", False)),
             ttl=int(result.get("ttl", 1) or 1),
         )
 
     async def update_record(self, zone_id: str, record: DnsRecord, new_ip: str) -> DnsRecord:
         body: dict[str, Any] = {
-            "type": "A",
+            "type": record.record_type,
             "name": record.name,
             "content": new_ip,
             "ttl": record.ttl,
@@ -164,6 +166,7 @@ class CloudflareProvider(DNSProvider):
             record_id=str(result.get("id", record.record_id)),
             name=str(result.get("name", record.name)),
             current_ip=str(result.get("content", new_ip)),
+            record_type=str(result.get("type", record.record_type)),
             proxied=bool(result.get("proxied", record.proxied)),
             ttl=int(result.get("ttl", record.ttl) or record.ttl),
         )

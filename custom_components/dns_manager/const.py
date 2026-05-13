@@ -25,6 +25,7 @@ CONF_RECORDS = "records"
 
 CONF_RECORD_ID = "record_id"
 CONF_RECORD_NAME = "name"
+CONF_RECORD_TYPE = "record_type"
 CONF_IP_MODE = "ip_mode"
 IP_MODE_AUTO = "auto"
 IP_MODE_STATIC = "static"

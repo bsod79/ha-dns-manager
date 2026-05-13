@@ -12,6 +12,7 @@ from custom_components.dns_manager.const import (
     CONF_IP_DETECTION_URL,
     CONF_PROVIDER_TYPE,
     CONF_RECORDS,
+    CONF_RECORD_TYPE,
     CONF_SCAN_INTERVAL,
     CONF_ZONE_ID,
     CONF_ZONE_NAME,
@@ -78,7 +79,7 @@ async def test_options_flow_add_record(hass: HomeAssistant) -> None:
     provider = AsyncMock()
     provider.list_a_records = AsyncMock(
         return_value=[
-            type("R", (), {"record_id": "r1", "name": "home.example.com"})(),
+            type("R", (), {"record_id": "r1", "name": "home.example.com", "record_type": "A"})(),
         ]
     )
 
@@ -98,4 +99,5 @@ async def test_options_flow_add_record(hass: HomeAssistant) -> None:
         assert result["type"] == "create_entry"
         assert len(result["data"][CONF_RECORDS]) == 1
         assert result["data"][CONF_RECORDS][0]["record_id"] == "r1"
+        assert result["data"][CONF_RECORDS][0].get(CONF_RECORD_TYPE) == "A"
 

@@ -7,7 +7,7 @@ from homeassistant.config_entries import ConfigEntry
 from homeassistant.core import HomeAssistant
 from homeassistant.helpers.entity_platform import AddEntitiesCallback
 
-from .const import CONF_ENABLED, CONF_RECORD_ID
+from .const import CONF_ENABLED, CONF_RECORD_ID, CONF_RECORD_NAME, CONF_RECORD_TYPE
 from .coordinator import DnsManagerCoordinator
 from .entity_base import DnsManagerEntity
 
@@ -37,10 +37,19 @@ class RecordInSyncBinarySensor(DnsManagerEntity, BinarySensorEntity):
         self.record_id = record_id
         self._attr_unique_id = f"dns_manager_{entry.entry_id}_{record_id}_in_sync"
 
+    def _record_options_row(self) -> dict | None:
+        for rec in self.entry.options.get("records", []):
+            if str(rec.get(CONF_RECORD_ID)) == self.record_id:
+                return rec
+        return None
+
     @property
     def name(self) -> str | None:
         rs = self.coordinator.data.records.get(self.record_id) if self.coordinator.data else None
-        return f"{rs.name if rs else self.record_id} in sync"
+        row = self._record_options_row()
+        display = rs.name if rs else (str(row.get(CONF_RECORD_NAME, self.record_id)) if row else self.record_id)
+        rtype = str(row.get(CONF_RECORD_TYPE, "A")) if row else "A"
+        return f"{display} ({rtype}) in sync"
 
     @property
     def icon(self) -> str:
@@ -58,9 +67,11 @@ class RecordInSyncBinarySensor(DnsManagerEntity, BinarySensorEntity):
         rs = self.coordinator.data.records.get(self.record_id)
         if not rs:
             return None
+        row = self._record_options_row()
         attrs: dict[str, str] = {
             "record_id": rs.record_id,
             "record_name": rs.name,
+            "record_type": str(row.get(CONF_RECORD_TYPE, "A")) if row else "A",
             "current_ip": rs.current_ip,
             "expected_ip": rs.expected_ip,
         }

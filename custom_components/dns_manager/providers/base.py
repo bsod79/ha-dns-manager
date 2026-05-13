@@ -8,7 +8,7 @@ from dataclasses import dataclass
 
 @dataclass(slots=True)
 class DnsRecord:
-    """Represents a single DNS A record.
+    """Represents a single DNS record (managed updates are A records for now).
 
     Note: Some fields are provider-specific and may be ignored by providers.
     """
@@ -16,6 +16,7 @@ class DnsRecord:
     record_id: str
     name: str
     current_ip: str
+    record_type: str = "A"
     proxied: bool = False
     ttl: int = 1
 

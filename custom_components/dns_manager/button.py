@@ -7,7 +7,7 @@ from homeassistant.config_entries import ConfigEntry
 from homeassistant.core import HomeAssistant
 from homeassistant.helpers.entity_platform import AddEntitiesCallback
 
-from .const import CONF_ENABLED, CONF_RECORD_ID
+from .const import CONF_ENABLED, CONF_RECORD_ID, CONF_RECORD_NAME, CONF_RECORD_TYPE
 from .coordinator import DnsManagerCoordinator
 from .entity_base import DnsManagerEntity
 from .services import async_update_all_records, async_update_record_by_id
@@ -50,10 +50,19 @@ class UpdateRecordButton(DnsManagerEntity, ButtonEntity):
         self.record_id = record_id
         self._attr_unique_id = f"dns_manager_{entry.entry_id}_{record_id}_update"
 
+    def _record_options_row(self) -> dict | None:
+        for rec in self.entry.options.get("records", []):
+            if str(rec.get(CONF_RECORD_ID)) == self.record_id:
+                return rec
+        return None
+
     @property
     def name(self) -> str | None:
         rs = self.coordinator.data.records.get(self.record_id) if self.coordinator.data else None
-        return f"Update {rs.name if rs else self.record_id}"
+        row = self._record_options_row()
+        display = rs.name if rs else (str(row.get(CONF_RECORD_NAME, self.record_id)) if row else self.record_id)
+        rtype = str(row.get(CONF_RECORD_TYPE, "A")) if row else "A"
+        return f"Update {display} ({rtype})"
 
     async def async_press(self) -> None:
         await async_update_record_by_id(self.coordinator, self.record_id)
