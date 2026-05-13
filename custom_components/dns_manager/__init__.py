@@ -19,6 +19,10 @@ class RuntimeData:
     coordinator: DnsManagerCoordinator
 
 
+async def _async_reload_entry(hass: HomeAssistant, entry: ConfigEntry) -> None:
+    await hass.config_entries.async_reload(entry.entry_id)
+
+
 async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     """Set up DNS Manager from a config entry."""
 
@@ -32,6 +36,7 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     await coordinator.async_config_entry_first_refresh()
 
     entry.runtime_data = RuntimeData(coordinator=coordinator)
+    entry.async_on_unload(entry.add_update_listener(_async_reload_entry))
 
     await async_register_services(hass)
     await hass.config_entries.async_forward_entry_setups(entry, PLATFORMS)

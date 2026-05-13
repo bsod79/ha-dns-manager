@@ -7,6 +7,7 @@ from homeassistant.config_entries import ConfigEntry
 from homeassistant.core import HomeAssistant
 from homeassistant.helpers.entity_platform import AddEntitiesCallback
 
+from .const import CONF_ENABLED, CONF_RECORD_ID
 from .coordinator import DnsManagerCoordinator
 from .entity_base import DnsManagerEntity
 from .services import async_update_all_records, async_update_record_by_id
@@ -20,9 +21,11 @@ async def async_setup_entry(
     coordinator: DnsManagerCoordinator = entry.runtime_data.coordinator
     entities: list[ButtonEntity] = [UpdateAllButton(coordinator, entry)]
 
-    if coordinator.data:
-        for record_id in coordinator.data.records:
-            entities.append(UpdateRecordButton(coordinator, entry, record_id))
+    for rec_cfg in entry.options.get("records", []):
+        if rec_cfg.get(CONF_ENABLED, True) is not True:
+            continue
+        record_id = str(rec_cfg[CONF_RECORD_ID])
+        entities.append(UpdateRecordButton(coordinator, entry, record_id))
 
     async_add_entities(entities)
 

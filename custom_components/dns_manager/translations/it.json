@@ -4,7 +4,13 @@
       "cannot_connect": "Impossibile connettersi",
       "invalid_auth": "Autenticazione non valida",
       "invalid_ip": "Indirizzo IP non valido",
+      "record_already_managed": "Il record è già gestito",
       "unknown": "Errore imprevisto"
+    }
+  },
+  "options": {
+    "abort": {
+      "no_managed_records": "Nessun record gestito al momento."
     }
   }
 }
