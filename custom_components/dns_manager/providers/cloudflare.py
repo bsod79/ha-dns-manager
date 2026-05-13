@@ -21,6 +21,25 @@ from .base import DNSProvider, DnsRecord
 CF_BASE_URL = "https://api.cloudflare.com/client/v4"
 
 
+def _cloudflare_error_detail(payload: Any) -> str:
+    """Best-effort human detail from a Cloudflare v4 JSON body."""
+    if not isinstance(payload, dict):
+        return ""
+    errors = payload.get("errors") or []
+    parts: list[str] = []
+    for item in errors:
+        if not isinstance(item, dict):
+            continue
+        msg = item.get("message")
+        if msg:
+            parts.append(str(msg))
+            continue
+        code = item.get("code")
+        if code is not None:
+            parts.append(str(code))
+    return " ".join(parts).strip()
+
+
 class CloudflareProvider(DNSProvider):
     """Cloudflare implementation using the v4 REST API."""
 
@@ -61,8 +80,30 @@ class CloudflareProvider(DNSProvider):
                 except Exception as err:  # noqa: BLE001
                     raise ProviderAPIError(f"Cloudflare returned invalid JSON ({resp.status})") from err
 
-        if resp.status == 401 or resp.status == 403:
-            raise ProviderAuthError("Cloudflare authentication failed")
+        detail = _cloudflare_error_detail(payload)
+
+        if resp.status == 401:
+            msg = "Invalid Cloudflare credentials or API token."
+            if detail:
+                msg = f"{msg} {detail}"
+            raise ProviderAuthError(msg.strip())
+
+        if resp.status == 403:
+            # Common case: token can read DNS but lacks Zone: DNS: Edit for writes.
+            msg = (
+                "Cloudflare refused this request (HTTP 403). "
+                "If you use an API token, grant DNS write access for this zone "
+                "(permission: Zone — DNS — Edit, with the correct zone resource)."
+            )
+            if detail:
+                msg = f"{msg} Cloudflare: {detail}"
+            raise ProviderAPIError(msg.strip())
+
+        if resp.status < 200 or resp.status >= 300:
+            msg = f"Unexpected Cloudflare HTTP status {resp.status}"
+            if detail:
+                msg = f"{msg}: {detail}"
+            raise ProviderAPIError(msg.strip())
 
         if not isinstance(payload, dict) or payload.get("success") is not True:
             errors = []

@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from unittest.mock import AsyncMock, MagicMock, patch
+
 import pytest
 
 from custom_components.dns_manager.exceptions import ProviderAPIError, ProviderAuthError
@@ -57,4 +59,55 @@ async def test_cloudflare_list_zones_unexpected(monkeypatch):
     monkeypatch.setattr(p, "_request", fake_request)
     with pytest.raises(ProviderAPIError):
         await p.list_zones()
+
+
+def _async_context_manager(enter_result: object) -> MagicMock:
+    cm = MagicMock()
+    cm.__aenter__ = AsyncMock(return_value=enter_result)
+    cm.__aexit__ = AsyncMock(return_value=None)
+    return cm
+
+
+@pytest.mark.asyncio
+async def test_cloudflare_http_403_raises_provider_api_error():
+    """Writes require DNS edit; 403 must not be mislabeled as bad credentials."""
+    p = CloudflareProvider(
+        ProviderConfig(provider_type="cloudflare", credentials={"auth_mode": "token", "api_token": "t"}),
+    )
+
+    resp = MagicMock()
+    resp.status = 403
+    resp.json = AsyncMock(return_value={"success": False, "errors": [{"message": "not allowed"}]})
+    req_cm = _async_context_manager(resp)
+    sess = MagicMock()
+    sess.request = MagicMock(return_value=req_cm)
+    sess_cm = _async_context_manager(sess)
+
+    with patch("custom_components.dns_manager.providers.cloudflare.aiohttp.ClientSession", return_value=sess_cm):
+        with pytest.raises(ProviderAPIError) as exc:
+            await p._request("PUT", "/zones/z/dns_records/rid", json={"type": "A", "name": "a", "content": "1.1.1.1"})
+
+    assert "403" in str(exc.value)
+    assert "not allowed" in str(exc.value)
+
+
+@pytest.mark.asyncio
+async def test_cloudflare_http_401_raises_provider_auth_error():
+    p = CloudflareProvider(
+        ProviderConfig(provider_type="cloudflare", credentials={"auth_mode": "token", "api_token": "t"}),
+    )
+
+    resp = MagicMock()
+    resp.status = 401
+    resp.json = AsyncMock(return_value={"success": False, "errors": [{"message": "Invalid API Token"}]})
+    req_cm = _async_context_manager(resp)
+    sess = MagicMock()
+    sess.request = MagicMock(return_value=req_cm)
+    sess_cm = _async_context_manager(sess)
+
+    with patch("custom_components.dns_manager.providers.cloudflare.aiohttp.ClientSession", return_value=sess_cm):
+        with pytest.raises(ProviderAuthError) as exc:
+            await p._request("GET", "/zones")
+
+    assert "Invalid API Token" in str(exc.value)
 

@@ -5,6 +5,7 @@ from __future__ import annotations
 import ipaddress
 
 from homeassistant.core import HomeAssistant, ServiceCall
+from homeassistant.exceptions import HomeAssistantError
 
 from .const import (
     ATTR_CONFIG_ENTRY_ID,
@@ -23,6 +24,7 @@ from .const import (
     SERVICE_UPDATE_RECORD,
 )
 from .coordinator import DnsManagerCoordinator
+from .exceptions import DNSManagerError
 from .providers.base import DnsRecord
 
 
@@ -81,34 +83,40 @@ def _expected_ip(coord: DnsManagerCoordinator, rec_cfg: dict, *, ip_override: st
 
 
 async def async_update_all_records(coord: DnsManagerCoordinator) -> None:
-    entry = coord.entry
-    zone_id = entry.data["zone_id"]
+    try:
+        entry = coord.entry
+        zone_id = entry.data["zone_id"]
 
-    for rec_cfg in entry.options.get(CONF_RECORDS, []):
-        if rec_cfg.get(CONF_ENABLED, True) is not True:
-            continue
-        record_id = str(rec_cfg[CONF_RECORD_ID])
-        await async_update_record_by_id(coord, record_id)
+        for rec_cfg in entry.options.get(CONF_RECORDS, []):
+            if rec_cfg.get(CONF_ENABLED, True) is not True:
+                continue
+            record_id = str(rec_cfg[CONF_RECORD_ID])
+            await async_update_record_by_id(coord, record_id)
 
-    await coord.async_request_refresh()
+        await coord.async_request_refresh()
+    except DNSManagerError as err:
+        raise HomeAssistantError(str(err)) from err
 
 
 async def async_update_record_by_id(coord: DnsManagerCoordinator, record_id: str) -> None:
-    entry = coord.entry
-    zone_id = entry.data["zone_id"]
+    try:
+        entry = coord.entry
+        zone_id = entry.data["zone_id"]
 
-    rec_cfgs = [r for r in entry.options.get(CONF_RECORDS, []) if str(r.get(CONF_RECORD_ID)) == record_id]
-    if not rec_cfgs:
-        return
-    rec_cfg = rec_cfgs[0]
+        rec_cfgs = [r for r in entry.options.get(CONF_RECORDS, []) if str(r.get(CONF_RECORD_ID)) == record_id]
+        if not rec_cfgs:
+            return
+        rec_cfg = rec_cfgs[0]
 
-    expected = _expected_ip(coord, rec_cfg, ip_override=None)
-    if not expected:
-        return
+        expected = _expected_ip(coord, rec_cfg, ip_override=None)
+        if not expected:
+            return
 
-    current: DnsRecord = await coord.provider.get_record(zone_id, record_id)
-    await coord.provider.update_record(zone_id, current, expected)
-    coord.set_last_updated(record_id)
+        current: DnsRecord = await coord.provider.get_record(zone_id, record_id)
+        await coord.provider.update_record(zone_id, current, expected)
+        coord.set_last_updated(record_id)
+    except DNSManagerError as err:
+        raise HomeAssistantError(str(err)) from err
 
 
 async def async_update_record_by_name(
@@ -116,23 +124,26 @@ async def async_update_record_by_name(
     record_name: str,
     ip_override: str | None,
 ) -> None:
-    entry = coord.entry
-    zone_id = entry.data["zone_id"]
+    try:
+        entry = coord.entry
+        zone_id = entry.data["zone_id"]
 
-    for rec_cfg in entry.options.get(CONF_RECORDS, []):
-        if str(rec_cfg.get(CONF_RECORD_NAME, "")).lower() != record_name.lower():
-            continue
-        if rec_cfg.get(CONF_ENABLED, True) is not True:
-            continue
+        for rec_cfg in entry.options.get(CONF_RECORDS, []):
+            if str(rec_cfg.get(CONF_RECORD_NAME, "")).lower() != record_name.lower():
+                continue
+            if rec_cfg.get(CONF_ENABLED, True) is not True:
+                continue
 
-        record_id = str(rec_cfg[CONF_RECORD_ID])
-        expected = _expected_ip(coord, rec_cfg, ip_override=ip_override)
-        if not expected:
-            continue
+            record_id = str(rec_cfg[CONF_RECORD_ID])
+            expected = _expected_ip(coord, rec_cfg, ip_override=ip_override)
+            if not expected:
+                continue
 
-        current: DnsRecord = await coord.provider.get_record(zone_id, record_id)
-        await coord.provider.update_record(zone_id, current, expected)
-        coord.set_last_updated(record_id)
+            current: DnsRecord = await coord.provider.get_record(zone_id, record_id)
+            await coord.provider.update_record(zone_id, current, expected)
+            coord.set_last_updated(record_id)
 
-    await coord.async_request_refresh()
+        await coord.async_request_refresh()
+    except DNSManagerError as err:
+        raise HomeAssistantError(str(err)) from err
 

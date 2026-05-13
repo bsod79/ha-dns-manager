@@ -8,7 +8,7 @@ from homeassistant.helpers.entity import EntityCategory
 from homeassistant.core import HomeAssistant
 from homeassistant.helpers.entity_platform import AddEntitiesCallback
 
-from .const import CONF_ENABLED, CONF_RECORD_ID, CONF_RECORD_NAME, CONF_RECORD_TYPE
+from .const import CONF_ENABLED, CONF_RECORD_ID, CONF_RECORD_NAME, CONF_RECORDS, CONF_RECORD_TYPE
 from .coordinator import DnsManagerCoordinator
 from .entity_base import DnsManagerEntity
 from .services import async_update_all_records, async_update_record_by_id
@@ -22,7 +22,7 @@ async def async_setup_entry(
     coordinator: DnsManagerCoordinator = entry.runtime_data.coordinator
     entities: list[ButtonEntity] = [UpdateAllButton(coordinator, entry)]
 
-    for rec_cfg in entry.options.get("records", []):
+    for rec_cfg in entry.options.get(CONF_RECORDS, []):
         if rec_cfg.get(CONF_ENABLED, True) is not True:
             continue
         record_id = str(rec_cfg[CONF_RECORD_ID])
@@ -56,7 +56,7 @@ class UpdateRecordButton(DnsManagerEntity, ButtonEntity):
         self._attr_unique_id = f"dns_manager_{entry.entry_id}_{record_id}_update"
 
     def _record_options_row(self) -> dict | None:
-        for rec in self.entry.options.get("records", []):
+        for rec in self.entry.options.get(CONF_RECORDS, []):
             if str(rec.get(CONF_RECORD_ID)) == self.record_id:
                 return rec
         return None
