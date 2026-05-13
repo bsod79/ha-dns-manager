@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import logging
 from dataclasses import dataclass
 from datetime import datetime, timedelta, timezone
 
@@ -27,6 +28,8 @@ from .const import (
 from .exceptions import DNSManagerError, ProviderAuthError
 from .providers.base import DNSProvider, DnsRecord
 from .utils.ip_detection import detect_public_ip
+
+_LOGGER = logging.getLogger(__name__)
 
 
 @dataclass(slots=True)
@@ -56,6 +59,7 @@ class DnsManagerCoordinator(DataUpdateCoordinator[CoordinatorData]):
         scan = int(entry.options.get(CONF_SCAN_INTERVAL, DEFAULT_SCAN_INTERVAL))
         super().__init__(
             hass,
+            _LOGGER,
             name=f"dns_manager_{entry.entry_id}",
             update_interval=timedelta(seconds=scan),
         )
