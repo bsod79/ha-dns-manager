@@ -4,7 +4,7 @@ from __future__ import annotations
 
 DOMAIN = "dns_manager"
 
-PLATFORMS: list[str] = ["sensor", "binary_sensor", "button"]
+PLATFORMS: list[str] = ["sensor", "button"]
 
 CONF_PROVIDER_TYPE = "provider_type"
 CONF_CREDENTIALS = "credentials"
@@ -34,6 +34,16 @@ CONF_ENABLED = "enabled"
 
 DEFAULT_SCAN_INTERVAL = 300
 DEFAULT_IP_DETECTION_URL = "https://api.ipify.org?format=json"
+
+# ENUM sensor states: managed record IP vs expected (SensorDeviceClass.ENUM)
+RECORD_STATUS_READY = "ready"
+RECORD_STATUS_NOT_READY = "not_ready"
+RECORD_STATUS_UNKNOWN = "unknown"
+RECORD_STATUS_OPTIONS: list[str] = [
+    RECORD_STATUS_READY,
+    RECORD_STATUS_NOT_READY,
+    RECORD_STATUS_UNKNOWN,
+]
 
 SERVICE_UPDATE_ALL = "update_all_records"
 SERVICE_UPDATE_RECORD = "update_record"

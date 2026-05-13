@@ -83,6 +83,17 @@
         }
       }
     }
+  },
+  "entity": {
+    "sensor": {
+      "record_status": {
+        "state": {
+          "ready": "In sync",
+          "not_ready": "Out of sync",
+          "unknown": "Unknown"
+        }
+      }
+    }
   }
 }
 

@@ -23,6 +23,17 @@
     "abort": {
       "no_managed_records": "Nessun record gestito al momento."
     }
+  },
+  "entity": {
+    "sensor": {
+      "record_status": {
+        "state": {
+          "ready": "Allineato",
+          "not_ready": "Non allineato",
+          "unknown": "Sconosciuto"
+        }
+      }
+    }
   }
 }
 
