@@ -1,0 +1,22 @@
+update_all_records:
+  description: "Force update all managed A records to their expected IPs."
+  fields:
+    config_entry_id:
+      description: "Target integration instance (required if multiple entries exist)"
+      required: false
+
+update_record:
+  description: "Force update a single A record."
+  fields:
+    record_name:
+      description: "FQDN of the record, e.g. home.example.com"
+      required: true
+      example: "home.example.com"
+    ip_override:
+      description: "Optional IP override for this call only (does not persist)"
+      required: false
+      example: "1.2.3.4"
+
+refresh_status:
+  description: "Force a re-fetch of all record statuses without updating."
+

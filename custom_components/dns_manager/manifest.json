@@ -1,0 +1,14 @@
+{
+  "domain": "dns_manager",
+  "name": "DNS Manager",
+  "version": "0.1.0",
+  "documentation": "https://github.com/YOUR_USER/ha-dns-manager",
+  "issue_tracker": "https://github.com/YOUR_USER/ha-dns-manager/issues",
+  "dependencies": [],
+  "codeowners": ["@YOUR_USER"],
+  "requirements": [],
+  "iot_class": "cloud_polling",
+  "config_flow": true,
+  "integration_type": "service"
+}
+

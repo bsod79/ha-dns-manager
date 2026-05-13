@@ -1,0 +1,11 @@
+{
+  "config": {
+    "error": {
+      "cannot_connect": "Impossibile connettersi",
+      "invalid_auth": "Autenticazione non valida",
+      "invalid_ip": "Indirizzo IP non valido",
+      "unknown": "Errore imprevisto"
+    }
+  }
+}
+
