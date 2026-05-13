@@ -143,22 +143,27 @@ class DnsManagerConfigFlow(config_entries.ConfigFlow, domain="dns_manager"):
     @staticmethod
     @config_entries.callback
     def async_get_options_flow(config_entry: config_entries.ConfigEntry) -> config_entries.OptionsFlow:
-        return DnsManagerOptionsFlow(config_entry)
+        return DnsManagerOptionsFlow()
 
 
 class DnsManagerOptionsFlow(config_entries.OptionsFlow):
     """Handle options."""
 
-    def __init__(self, config_entry: config_entries.ConfigEntry) -> None:
-        self.config_entry = config_entry
+    def __init__(self) -> None:
         self._provider = None
         self._records: list[DnsRecord] = []
         self._selected_record_id: str | None = None
         self._editing_record_id: str | None = None
-        self._scan_interval = int(config_entry.options.get(CONF_SCAN_INTERVAL, DEFAULT_SCAN_INTERVAL))
-        self._ip_url = str(config_entry.options.get(CONF_IP_DETECTION_URL, DEFAULT_IP_DETECTION_URL))
+        self._scan_interval: int = DEFAULT_SCAN_INTERVAL
+        self._ip_url: str = DEFAULT_IP_DETECTION_URL
 
     async def async_step_init(self, user_input: dict[str, Any] | None = None) -> FlowResult:
+        self._scan_interval = int(
+            self.config_entry.options.get(CONF_SCAN_INTERVAL, DEFAULT_SCAN_INTERVAL)
+        )
+        self._ip_url = str(
+            self.config_entry.options.get(CONF_IP_DETECTION_URL, DEFAULT_IP_DETECTION_URL)
+        )
         return self.async_show_menu(
             step_id="init",
             menu_options=["general", "add_record_select", "edit_record_select", "remove_record_select"],
