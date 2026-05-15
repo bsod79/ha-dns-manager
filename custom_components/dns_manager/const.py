@@ -21,6 +21,7 @@ CONF_API_KEY = "api_key"
 
 CONF_SCAN_INTERVAL = "scan_interval"
 CONF_IP_DETECTION_URL = "ip_detection_url"
+CONF_AUTO_SYNC = "auto_sync"
 CONF_RECORDS = "records"
 
 CONF_RECORD_ID = "record_id"
@@ -33,6 +34,7 @@ CONF_STATIC_IP = "static_ip"
 CONF_ENABLED = "enabled"
 
 DEFAULT_SCAN_INTERVAL = 300
+DEFAULT_AUTO_SYNC = False
 DEFAULT_IP_DETECTION_URL = "https://api.ipify.org?format=json"
 
 # ENUM sensor states: managed record IP vs expected (SensorDeviceClass.ENUM)

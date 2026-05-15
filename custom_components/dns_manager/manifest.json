@@ -1,7 +1,7 @@
 {
   "domain": "dns_manager",
   "name": "DNS Manager",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "documentation": "https://github.com/YOUR_USER/ha-dns-manager",
   "issue_tracker": "https://github.com/YOUR_USER/ha-dns-manager/issues",
   "dependencies": [],

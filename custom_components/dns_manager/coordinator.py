@@ -12,7 +12,9 @@ from homeassistant.core import HomeAssistant
 from homeassistant.helpers.aiohttp_client import async_get_clientsession
 from homeassistant.helpers.update_coordinator import DataUpdateCoordinator, UpdateFailed
 
+from .activity_log import DnsManagerActivityLog
 from .const import (
+    CONF_AUTO_SYNC,
     CONF_ENABLED,
     CONF_IP_DETECTION_URL,
     CONF_IP_MODE,
@@ -21,6 +23,7 @@ from .const import (
     CONF_RECORD_NAME,
     CONF_SCAN_INTERVAL,
     CONF_STATIC_IP,
+    DEFAULT_AUTO_SYNC,
     DEFAULT_IP_DETECTION_URL,
     DEFAULT_SCAN_INTERVAL,
     IP_MODE_AUTO,
@@ -50,11 +53,18 @@ class CoordinatorData:
 
 
 class DnsManagerCoordinator(DataUpdateCoordinator[CoordinatorData]):
-    """Central polling coordinator (read-only)."""
+    """Polls public IP and record status; optional auto-sync writes when out of sync."""
 
-    def __init__(self, hass: HomeAssistant, entry: ConfigEntry, provider: DNSProvider) -> None:
+    def __init__(
+        self,
+        hass: HomeAssistant,
+        entry: ConfigEntry,
+        provider: DNSProvider,
+        activity_log: DnsManagerActivityLog,
+    ) -> None:
         self.entry = entry
         self.provider = provider
+        self.activity_log = activity_log
 
         scan = int(entry.options.get(CONF_SCAN_INTERVAL, DEFAULT_SCAN_INTERVAL))
         super().__init__(
@@ -99,11 +109,57 @@ class DnsManagerCoordinator(DataUpdateCoordinator[CoordinatorData]):
                     last_updated=last_updated,
                 )
 
-            return CoordinatorData(public_ip=public_ip, records=records_out, last_checked=now)
+            data = CoordinatorData(public_ip=public_ip, records=records_out, last_checked=now)
+            await self._async_auto_sync_records(zone_id, data)
+            out_of_sync = [rs.name for rs in data.records.values() if not rs.in_sync]
+            self.activity_log.info(
+                "Poll complete",
+                public_ip=public_ip,
+                records_checked=len(data.records),
+                out_of_sync=out_of_sync,
+                auto_sync=bool(self.entry.options.get(CONF_AUTO_SYNC, DEFAULT_AUTO_SYNC)),
+            )
+            return data
         except ProviderAuthError as err:
+            self.activity_log.error("Poll failed: authentication", error=str(err))
             raise UpdateFailed(str(err)) from err
         except (aiohttp.ClientError, DNSManagerError) as err:
+            self.activity_log.error("Poll failed", error=str(err))
             raise UpdateFailed(str(err)) from err
+
+    async def _async_auto_sync_records(self, zone_id: str, data: CoordinatorData) -> None:
+        """Update provider when auto_sync is enabled and a record is out of sync."""
+        if not self.entry.options.get(CONF_AUTO_SYNC, DEFAULT_AUTO_SYNC):
+            return
+
+        now = datetime.now(timezone.utc)
+        for record_id, rs in data.records.items():
+            if rs.in_sync or not rs.expected_ip:
+                continue
+            try:
+                current = await self.provider.get_record(zone_id, record_id)
+                await self.provider.update_record(zone_id, current, rs.expected_ip)
+                data.records[record_id] = RecordStatus(
+                    record_id=rs.record_id,
+                    name=rs.name,
+                    current_ip=rs.expected_ip,
+                    expected_ip=rs.expected_ip,
+                    in_sync=True,
+                    last_updated=now,
+                )
+                self.activity_log.info(
+                    "Auto-sync updated DNS record",
+                    record_id=record_id,
+                    name=rs.name,
+                    ip=rs.expected_ip,
+                )
+            except DNSManagerError as err:
+                self.activity_log.error(
+                    "Auto-sync failed",
+                    record_id=record_id,
+                    name=rs.name,
+                    error=str(err),
+                )
 
     def set_last_updated(self, record_id: str) -> None:
         """Mark a record as updated now (used by services)."""

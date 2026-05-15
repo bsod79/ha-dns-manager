@@ -7,7 +7,8 @@ from dataclasses import dataclass
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.core import HomeAssistant
 
-from .const import DOMAIN, PLATFORMS
+from .activity_log import DnsManagerActivityLog
+from .const import CONF_AUTO_SYNC, CONF_RECORDS, CONF_SCAN_INTERVAL, DOMAIN, PLATFORMS
 from .coordinator import DnsManagerCoordinator
 from .providers import get_provider
 from .providers.base import ProviderConfig
@@ -17,6 +18,7 @@ from .services import async_register_services, async_unregister_services
 @dataclass(slots=True)
 class RuntimeData:
     coordinator: DnsManagerCoordinator
+    activity_log: DnsManagerActivityLog
 
 
 async def _async_reload_entry(hass: HomeAssistant, entry: ConfigEntry) -> None:
@@ -32,10 +34,21 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
             credentials=entry.data["credentials"],
         )
     )
-    coordinator = DnsManagerCoordinator(hass=hass, entry=entry, provider=provider)
+    activity_log = DnsManagerActivityLog()
+    coordinator = DnsManagerCoordinator(
+        hass=hass, entry=entry, provider=provider, activity_log=activity_log
+    )
     await coordinator.async_config_entry_first_refresh()
 
-    entry.runtime_data = RuntimeData(coordinator=coordinator)
+    activity_log.info(
+        "Integration started",
+        zone=entry.data.get("zone_name"),
+        scan_interval=entry.options.get(CONF_SCAN_INTERVAL),
+        auto_sync=entry.options.get(CONF_AUTO_SYNC, False),
+        managed_records=len(entry.options.get(CONF_RECORDS, [])),
+    )
+
+    entry.runtime_data = RuntimeData(coordinator=coordinator, activity_log=activity_log)
     entry.async_on_unload(entry.add_update_listener(_async_reload_entry))
 
     await async_register_services(hass)

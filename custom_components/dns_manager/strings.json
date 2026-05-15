@@ -46,7 +46,12 @@
         "title": "General settings",
         "data": {
           "scan_interval": "Polling interval (seconds)",
-          "ip_detection_url": "Public IP detection URL"
+          "ip_detection_url": "Public IP detection URL",
+          "auto_sync": "Automatically update DNS when out of sync"
+        },
+        "data_description": {
+          "scan_interval": "How often to check public IP and record status (default 300 s).",
+          "auto_sync": "When enabled, each poll also writes DNS records that are not aligned. When disabled, use Update buttons or services."
         }
       },
       "add_record_select": {

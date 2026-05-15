@@ -18,6 +18,18 @@
           "edit_record_select": "Modifica record gestito",
           "remove_record_select": "Rimuovi record gestito"
         }
+      },
+      "general": {
+        "title": "Impostazioni generali",
+        "data": {
+          "scan_interval": "Intervallo di polling (secondi)",
+          "ip_detection_url": "URL rilevamento IP pubblico",
+          "auto_sync": "Aggiorna automaticamente il DNS se non allineato"
+        },
+        "data_description": {
+          "scan_interval": "Ogni quanto controllare IP pubblico e stato dei record (predefinito 300 s).",
+          "auto_sync": "Se attivo, ogni polling aggiorna anche i record non allineati. Se disattivo, usa i pulsanti Aggiorna o i servizi."
+        }
       }
     },
     "abort": {

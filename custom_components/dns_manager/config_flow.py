@@ -15,6 +15,7 @@ from .const import (
     CONF_API_KEY,
     CONF_API_TOKEN,
     CONF_AUTH_MODE,
+    CONF_AUTO_SYNC,
     CONF_CREDENTIALS,
     CONF_ENABLED,
     CONF_IP_DETECTION_URL,
@@ -28,6 +29,7 @@ from .const import (
     CONF_STATIC_IP,
     CONF_ZONE_ID,
     CONF_ZONE_NAME,
+    DEFAULT_AUTO_SYNC,
     DEFAULT_IP_DETECTION_URL,
     DEFAULT_SCAN_INTERVAL,
     IP_MODE_AUTO,
@@ -133,6 +135,7 @@ class DnsManagerConfigFlow(config_entries.ConfigFlow, domain="dns_manager"):
             options = {
                 CONF_SCAN_INTERVAL: DEFAULT_SCAN_INTERVAL,
                 CONF_IP_DETECTION_URL: DEFAULT_IP_DETECTION_URL,
+                CONF_AUTO_SYNC: DEFAULT_AUTO_SYNC,
                 CONF_RECORDS: [],
             }
             return self.async_create_entry(title=title, data=data, options=options)
@@ -162,6 +165,15 @@ class DnsManagerOptionsFlow(config_entries.OptionsFlow):
         self._editing_record_id: str | None = None
         self._scan_interval: int = DEFAULT_SCAN_INTERVAL
         self._ip_url: str = DEFAULT_IP_DETECTION_URL
+        self._auto_sync: bool = DEFAULT_AUTO_SYNC
+
+    def _options_payload(self, records: list[dict[str, Any]]) -> dict[str, Any]:
+        return {
+            CONF_SCAN_INTERVAL: self._scan_interval,
+            CONF_IP_DETECTION_URL: self._ip_url,
+            CONF_AUTO_SYNC: self._auto_sync,
+            CONF_RECORDS: records,
+        }
 
     async def async_step_init(self, user_input: dict[str, Any] | None = None) -> FlowResult:
         self._scan_interval = int(
@@ -170,6 +182,7 @@ class DnsManagerOptionsFlow(config_entries.OptionsFlow):
         self._ip_url = str(
             self.config_entry.options.get(CONF_IP_DETECTION_URL, DEFAULT_IP_DETECTION_URL)
         )
+        self._auto_sync = bool(self.config_entry.options.get(CONF_AUTO_SYNC, DEFAULT_AUTO_SYNC))
         return self.async_show_menu(
             step_id="init",
             menu_options=["general", "add_record_select", "edit_record_select", "remove_record_select"],
@@ -179,19 +192,17 @@ class DnsManagerOptionsFlow(config_entries.OptionsFlow):
         if user_input is not None:
             self._scan_interval = int(user_input[CONF_SCAN_INTERVAL])
             self._ip_url = str(user_input[CONF_IP_DETECTION_URL])
+            self._auto_sync = bool(user_input.get(CONF_AUTO_SYNC, DEFAULT_AUTO_SYNC))
             return self.async_create_entry(
                 title="",
-                data={
-                    CONF_SCAN_INTERVAL: self._scan_interval,
-                    CONF_IP_DETECTION_URL: self._ip_url,
-                    CONF_RECORDS: list(self.config_entry.options.get(CONF_RECORDS, [])),
-                },
+                data=self._options_payload(list(self.config_entry.options.get(CONF_RECORDS, []))),
             )
 
         schema = vol.Schema(
             {
                 vol.Required(CONF_SCAN_INTERVAL, default=self._scan_interval): vol.Coerce(int),
                 vol.Required(CONF_IP_DETECTION_URL, default=self._ip_url): str,
+                vol.Optional(CONF_AUTO_SYNC, default=self._auto_sync): bool,
             }
         )
         return self.async_show_form(step_id="general", data_schema=schema)
@@ -256,11 +267,7 @@ class DnsManagerOptionsFlow(config_entries.OptionsFlow):
                 )
                 return self.async_create_entry(
                     title="",
-                    data={
-                        CONF_SCAN_INTERVAL: self._scan_interval,
-                        CONF_IP_DETECTION_URL: self._ip_url,
-                        CONF_RECORDS: new_records,
-                    },
+                    data=self._options_payload(new_records),
                 )
             except Exception:  # noqa: BLE001
                 errors["base"] = "invalid_ip"
@@ -332,11 +339,7 @@ class DnsManagerOptionsFlow(config_entries.OptionsFlow):
 
                 return self.async_create_entry(
                     title="",
-                    data={
-                        CONF_SCAN_INTERVAL: self._scan_interval,
-                        CONF_IP_DETECTION_URL: self._ip_url,
-                        CONF_RECORDS: new_records,
-                    },
+                    data=self._options_payload(new_records),
                 )
             except Exception:  # noqa: BLE001
                 errors["base"] = "invalid_ip"
@@ -362,11 +365,7 @@ class DnsManagerOptionsFlow(config_entries.OptionsFlow):
             new_records = [r for r in managed if str(r.get(CONF_RECORD_ID)) != record_id]
             return self.async_create_entry(
                 title="",
-                data={
-                    CONF_SCAN_INTERVAL: self._scan_interval,
-                    CONF_IP_DETECTION_URL: self._ip_url,
-                    CONF_RECORDS: new_records,
-                },
+                data=self._options_payload(new_records),
             )
 
         schema = vol.Schema(

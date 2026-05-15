@@ -83,7 +83,9 @@ def _expected_ip(coord: DnsManagerCoordinator, rec_cfg: dict, *, ip_override: st
 
 
 async def async_update_all_records(coord: DnsManagerCoordinator) -> None:
+    log = coord.entry.runtime_data.activity_log
     try:
+        log.info("Updating all managed DNS records")
         entry = coord.entry
         zone_id = entry.data["zone_id"]
 
@@ -94,11 +96,14 @@ async def async_update_all_records(coord: DnsManagerCoordinator) -> None:
             await async_update_record_by_id(coord, record_id)
 
         await coord.async_request_refresh()
+        log.info("All managed DNS records update finished")
     except DNSManagerError as err:
+        log.error("Update all records failed", error=str(err))
         raise HomeAssistantError(str(err)) from err
 
 
 async def async_update_record_by_id(coord: DnsManagerCoordinator, record_id: str) -> None:
+    log = coord.entry.runtime_data.activity_log
     try:
         entry = coord.entry
         zone_id = entry.data["zone_id"]
@@ -107,15 +112,30 @@ async def async_update_record_by_id(coord: DnsManagerCoordinator, record_id: str
         if not rec_cfgs:
             return
         rec_cfg = rec_cfgs[0]
+        record_name = str(rec_cfg.get(CONF_RECORD_NAME, record_id))
 
         expected = _expected_ip(coord, rec_cfg, ip_override=None)
         if not expected:
+            log.warning("Update skipped: no expected IP", record_id=record_id, name=record_name)
             return
 
+        log.info(
+            "Updating DNS record",
+            record_id=record_id,
+            name=record_name,
+            expected_ip=expected,
+        )
         current: DnsRecord = await coord.provider.get_record(zone_id, record_id)
         await coord.provider.update_record(zone_id, current, expected)
         coord.set_last_updated(record_id)
+        log.info(
+            "DNS record updated",
+            record_id=record_id,
+            name=record_name,
+            ip=expected,
+        )
     except DNSManagerError as err:
+        log.error("DNS record update failed", record_id=record_id, error=str(err))
         raise HomeAssistantError(str(err)) from err
 
 
