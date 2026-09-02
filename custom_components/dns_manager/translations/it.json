@@ -1,5 +1,14 @@
 {
   "config": {
+    "step": {
+      "user": {
+        "title": "DNS Manager",
+        "description": "Crea un'istanza DNS Manager. Aggiungi i record gestiti (ognuno con il proprio provider) dalle Opzioni dopo la configurazione.",
+        "data": {
+          "instance_name": "Nome istanza"
+        }
+      }
+    },
     "error": {
       "cannot_connect": "Impossibile connettersi",
       "invalid_auth": "Autenticazione non valida",
@@ -14,7 +23,7 @@
         "title": "DNS Manager",
         "menu_options": {
           "general": "Impostazioni generali",
-          "add_record_select": "Aggiungi record gestito",
+          "add_record_provider": "Aggiungi record gestito",
           "edit_record_select": "Modifica record gestito",
           "remove_record_select": "Rimuovi record gestito"
         }
@@ -29,6 +38,42 @@
         "data_description": {
           "scan_interval": "Ogni quanto controllare IP pubblico e stato dei record (predefinito 300 s).",
           "auto_sync": "Se attivo, ogni polling aggiorna anche i record non allineati. Se disattivo, usa i pulsanti Aggiorna o i servizi."
+        }
+      },
+      "add_record_provider": {
+        "title": "Scegli provider DNS",
+        "data": {
+          "provider_type": "Provider"
+        }
+      },
+      "add_record_duckdns": {
+        "title": "DuckDNS",
+        "data": {
+          "subdomain": "Sottodominio (senza .duckdns.org)",
+          "token": "Token"
+        }
+      },
+      "add_record_noip": {
+        "title": "No-IP",
+        "data": {
+          "hostname": "Hostname (FQDN)",
+          "username": "Username",
+          "password": "Password"
+        }
+      },
+      "add_record_dyndns": {
+        "title": "DynDNS",
+        "data": {
+          "hostname": "Hostname (FQDN)",
+          "username": "Username",
+          "password": "Password"
+        }
+      },
+      "add_record_dynv6": {
+        "title": "dynv6",
+        "data": {
+          "hostname": "Hostname (FQDN)",
+          "token": "Token"
         }
       }
     },
@@ -48,4 +93,3 @@
     }
   }
 }
-

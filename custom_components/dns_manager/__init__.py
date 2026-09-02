@@ -10,8 +10,6 @@ from homeassistant.core import HomeAssistant
 from .activity_log import DnsManagerActivityLog
 from .const import CONF_AUTO_SYNC, CONF_RECORDS, CONF_SCAN_INTERVAL, DOMAIN, PLATFORMS
 from .coordinator import DnsManagerCoordinator
-from .providers import get_provider
-from .providers.base import ProviderConfig
 from .services import async_register_services, async_unregister_services
 
 
@@ -28,21 +26,13 @@ async def _async_reload_entry(hass: HomeAssistant, entry: ConfigEntry) -> None:
 async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     """Set up DNS Manager from a config entry."""
 
-    provider = get_provider(
-        ProviderConfig(
-            provider_type=entry.data["provider_type"],
-            credentials=entry.data["credentials"],
-        )
-    )
     activity_log = DnsManagerActivityLog()
-    coordinator = DnsManagerCoordinator(
-        hass=hass, entry=entry, provider=provider, activity_log=activity_log
-    )
+    coordinator = DnsManagerCoordinator(hass=hass, entry=entry, activity_log=activity_log)
     await coordinator.async_config_entry_first_refresh()
 
     activity_log.info(
         "Integration started",
-        zone=entry.data.get("zone_name"),
+        title=entry.title,
         scan_interval=entry.options.get(CONF_SCAN_INTERVAL),
         auto_sync=entry.options.get(CONF_AUTO_SYNC, False),
         managed_records=len(entry.options.get(CONF_RECORDS, [])),
@@ -63,4 +53,3 @@ async def async_unload_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     if unload_ok:
         await async_unregister_services(hass)
     return unload_ok
-

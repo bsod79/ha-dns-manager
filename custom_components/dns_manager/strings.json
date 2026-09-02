@@ -1,25 +1,11 @@
 {
   "config": {
     "step": {
-      "provider": {
-        "title": "Choose provider",
+      "user": {
+        "title": "DNS Manager",
+        "description": "Create a DNS Manager instance. Add managed records (each with its own provider) via Options after setup.",
         "data": {
-          "provider_type": "Provider"
-        }
-      },
-      "credentials": {
-        "title": "Provider credentials",
-        "data": {
-          "auth_mode": "Authentication mode",
-          "api_token": "API token",
-          "api_email": "Email",
-          "api_key": "Global API key"
-        }
-      },
-      "zone": {
-        "title": "Select zone",
-        "data": {
-          "zone_id": "Zone"
+          "instance_name": "Instance name"
         }
       }
     },
@@ -37,7 +23,7 @@
         "title": "DNS Manager",
         "menu_options": {
           "general": "General settings",
-          "add_record_select": "Add managed record",
+          "add_record_provider": "Add managed record",
           "edit_record_select": "Edit managed record",
           "remove_record_select": "Remove managed record"
         }
@@ -54,8 +40,59 @@
           "auto_sync": "When enabled, each poll also writes DNS records that are not aligned. When disabled, use Update buttons or services."
         }
       },
-      "add_record_select": {
-        "title": "Add managed record",
+      "add_record_provider": {
+        "title": "Choose DNS provider",
+        "data": {
+          "provider_type": "Provider"
+        }
+      },
+      "add_record_duckdns": {
+        "title": "DuckDNS",
+        "data": {
+          "subdomain": "Subdomain (without .duckdns.org)",
+          "token": "Token"
+        }
+      },
+      "add_record_noip": {
+        "title": "No-IP",
+        "data": {
+          "hostname": "Hostname (FQDN)",
+          "username": "Username",
+          "password": "Password"
+        }
+      },
+      "add_record_dyndns": {
+        "title": "DynDNS",
+        "data": {
+          "hostname": "Hostname (FQDN)",
+          "username": "Username",
+          "password": "Password"
+        }
+      },
+      "add_record_dynv6": {
+        "title": "dynv6",
+        "data": {
+          "hostname": "Hostname (FQDN)",
+          "token": "Token"
+        }
+      },
+      "add_record_cloudflare_credentials": {
+        "title": "Cloudflare credentials",
+        "data": {
+          "auth_mode": "Authentication mode",
+          "api_token": "API token",
+          "api_email": "Email",
+          "api_key": "Global API key"
+        }
+      },
+      "add_record_cloudflare_zone": {
+        "title": "Cloudflare zone",
+        "data": {
+          "zone_id": "Zone"
+        }
+      },
+      "add_record_cloudflare_select": {
+        "title": "Cloudflare A record",
         "data": {
           "record_id": "Record"
         }
@@ -70,7 +107,7 @@
       "edit_record_select": {
         "title": "Edit managed record",
         "data": {
-          "record_id": "Record"
+          "record_uid": "Record"
         }
       },
       "edit_record_strategy": {
@@ -84,9 +121,12 @@
       "remove_record_select": {
         "title": "Remove managed record",
         "data": {
-          "record_id": "Record"
+          "record_uid": "Record"
         }
       }
+    },
+    "abort": {
+      "no_managed_records": "No managed records yet."
     }
   },
   "entity": {
@@ -101,4 +141,3 @@
     }
   }
 }
-

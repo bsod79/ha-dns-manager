@@ -14,7 +14,7 @@
         "title": "DNS Manager",
         "menu_options": {
           "general": "General settings",
-          "add_record_select": "Add managed record",
+          "add_record_provider": "Add managed record",
           "edit_record_select": "Edit managed record",
           "remove_record_select": "Remove managed record"
         }
@@ -29,6 +29,12 @@
         "data_description": {
           "scan_interval": "How often to check public IP and record status (default 300 s).",
           "auto_sync": "When enabled, each poll also writes DNS records that are not aligned. When disabled, use Update buttons or services."
+        }
+      },
+      "add_record_provider": {
+        "title": "Choose DNS provider",
+        "data": {
+          "provider_type": "Provider"
         }
       }
     },
@@ -48,4 +54,3 @@
     }
   }
 }
-

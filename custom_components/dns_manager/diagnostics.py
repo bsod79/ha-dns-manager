@@ -15,8 +15,11 @@ from .const import (
     CONF_AUTO_SYNC,
     CONF_CREDENTIALS,
     CONF_IP_DETECTION_URL,
+    CONF_PASSWORD,
+    CONF_PROVIDER_CONFIG,
     CONF_RECORDS,
     CONF_SCAN_INTERVAL,
+    CONF_TOKEN,
     CONF_ZONE_ID,
     CONF_ZONE_NAME,
     DOMAIN,
@@ -28,9 +31,14 @@ REDACT_KEYS = {
     CONF_API_KEY,
     CONF_API_EMAIL,
     CONF_CREDENTIALS,
+    CONF_PASSWORD,
+    CONF_TOKEN,
+    CONF_PROVIDER_CONFIG,
     "api_token",
     "api_key",
     "api_email",
+    "password",
+    "token",
 }
 
 
@@ -57,6 +65,7 @@ async def async_get_config_entry_diagnostics(hass: HomeAssistant, entry: ConfigE
                 "expected_ip": rs.expected_ip,
                 "in_sync": rs.in_sync,
                 "last_updated": rs.last_updated.isoformat() if rs.last_updated else None,
+                "provider": rs.provider_type,
             }
             for record_id, rs in coordinator.data.records.items()
         }
@@ -73,7 +82,7 @@ async def async_get_config_entry_diagnostics(hass: HomeAssistant, entry: ConfigE
             CONF_ZONE_ID: entry.data.get(CONF_ZONE_ID),
             CONF_ZONE_NAME: entry.data.get(CONF_ZONE_NAME),
             "managed_record_count": len(entry.options.get(CONF_RECORDS, [])),
-            CONF_RECORDS: entry.options.get(CONF_RECORDS, []),
+            CONF_RECORDS: async_redact_data(entry.options.get(CONF_RECORDS, []), REDACT_KEYS),
         },
         "coordinator": coordinator_snapshot,
         "activity_log": activity_log.as_list(),

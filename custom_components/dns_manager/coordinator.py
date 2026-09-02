@@ -18,8 +18,8 @@ from .const import (
     CONF_ENABLED,
     CONF_IP_DETECTION_URL,
     CONF_IP_MODE,
+    CONF_PROVIDER_TYPE,
     CONF_RECORDS,
-    CONF_RECORD_ID,
     CONF_RECORD_NAME,
     CONF_SCAN_INTERVAL,
     CONF_STATIC_IP,
@@ -29,7 +29,13 @@ from .const import (
     IP_MODE_AUTO,
 )
 from .exceptions import DNSManagerError, ProviderAuthError
-from .providers.base import DNSProvider, DnsRecord
+from .providers import get_provider_for_record
+from .providers.record_context import (
+    normalize_record,
+    provider_record_id,
+    record_uid,
+    zone_id_for_record,
+)
 from .utils.ip_detection import detect_public_ip
 
 _LOGGER = logging.getLogger(__name__)
@@ -43,6 +49,7 @@ class RecordStatus:
     expected_ip: str
     in_sync: bool
     last_updated: datetime | None
+    provider_type: str = ""
 
 
 @dataclass(slots=True)
@@ -59,11 +66,9 @@ class DnsManagerCoordinator(DataUpdateCoordinator[CoordinatorData]):
         self,
         hass: HomeAssistant,
         entry: ConfigEntry,
-        provider: DNSProvider,
         activity_log: DnsManagerActivityLog,
     ) -> None:
         self.entry = entry
-        self.provider = provider
         self.activity_log = activity_log
 
         scan = int(entry.options.get(CONF_SCAN_INTERVAL, DEFAULT_SCAN_INTERVAL))
@@ -75,103 +80,158 @@ class DnsManagerCoordinator(DataUpdateCoordinator[CoordinatorData]):
         )
 
     def _managed_records(self) -> list[dict]:
-        return list(self.entry.options.get(CONF_RECORDS, []))
+        return [
+            normalize_record(r, self.entry)
+            for r in self.entry.options.get(CONF_RECORDS, [])
+        ]
 
     async def _async_update_data(self) -> CoordinatorData:
+        ip_url = self.entry.options.get(CONF_IP_DETECTION_URL, DEFAULT_IP_DETECTION_URL)
+        session = async_get_clientsession(self.hass)
+        public_ip = ""
+        public_ip_error: str | None = None
+
         try:
-            ip_url = self.entry.options.get(CONF_IP_DETECTION_URL, DEFAULT_IP_DETECTION_URL)
-            session = async_get_clientsession(self.hass)
             public_ip = await detect_public_ip(session, primary_url=str(ip_url))
+        except DNSManagerError as err:
+            public_ip_error = str(err)
+            self.activity_log.warning("Public IP detection failed", error=public_ip_error)
 
-            zone_id = self.entry.data["zone_id"]
-            records_out: dict[str, RecordStatus] = {}
-            now = datetime.now(timezone.utc)
+        records_out: dict[str, RecordStatus] = {}
+        now = datetime.now(timezone.utc)
+        poll_errors: list[str] = []
 
-            for rec_cfg in self._managed_records():
-                if rec_cfg.get(CONF_ENABLED, True) is not True:
-                    continue
-                record_id = str(rec_cfg[CONF_RECORD_ID])
-                record_name = str(rec_cfg.get(CONF_RECORD_NAME, record_id))
-                ip_mode = rec_cfg.get(CONF_IP_MODE, IP_MODE_AUTO)
-                expected_ip = public_ip if ip_mode == IP_MODE_AUTO else str(rec_cfg.get(CONF_STATIC_IP, "") or "")
+        for rec_cfg in self._managed_records():
+            if rec_cfg.get(CONF_ENABLED, True) is not True:
+                continue
 
-                provider_record = await self.provider.get_record(zone_id, record_id)
-                last_updated = None
-                if self.data and record_id in self.data.records:
-                    last_updated = self.data.records[record_id].last_updated
+            uid = record_uid(rec_cfg)
+            record_name = str(rec_cfg.get(CONF_RECORD_NAME, uid))
+            ip_mode = rec_cfg.get(CONF_IP_MODE, IP_MODE_AUTO)
+            if ip_mode == IP_MODE_AUTO:
+                expected_ip = public_ip
+            else:
+                expected_ip = str(rec_cfg.get(CONF_STATIC_IP, "") or "")
 
-                records_out[record_id] = RecordStatus(
-                    record_id=record_id,
+            last_updated = None
+            if self.data and uid in self.data.records:
+                last_updated = self.data.records[uid].last_updated
+
+            provider_type = str(rec_cfg.get(CONF_PROVIDER_TYPE, ""))
+            try:
+                provider = get_provider_for_record(rec_cfg, self.entry)
+                zone_id = zone_id_for_record(rec_cfg, self.entry)
+                prov_rec_id = provider_record_id(rec_cfg)
+                provider_record = await provider.get_record(zone_id, prov_rec_id)
+                records_out[uid] = RecordStatus(
+                    record_id=uid,
                     name=record_name or provider_record.name,
                     current_ip=provider_record.current_ip,
                     expected_ip=expected_ip,
-                    in_sync=provider_record.current_ip == expected_ip,
+                    in_sync=bool(expected_ip and provider_record.current_ip == expected_ip),
                     last_updated=last_updated,
+                    provider_type=provider_type,
+                )
+            except ProviderAuthError as err:
+                poll_errors.append(f"{record_name}: {err}")
+                self.activity_log.error("Record poll auth failed", record=record_name, error=str(err))
+                records_out[uid] = RecordStatus(
+                    record_id=uid,
+                    name=record_name,
+                    current_ip="",
+                    expected_ip=expected_ip,
+                    in_sync=False,
+                    last_updated=last_updated,
+                    provider_type=provider_type,
+                )
+            except (aiohttp.ClientError, DNSManagerError) as err:
+                poll_errors.append(f"{record_name}: {err}")
+                self.activity_log.error("Record poll failed", record=record_name, error=str(err))
+                records_out[uid] = RecordStatus(
+                    record_id=uid,
+                    name=record_name,
+                    current_ip="",
+                    expected_ip=expected_ip,
+                    in_sync=False,
+                    last_updated=last_updated,
+                    provider_type=provider_type,
                 )
 
-            data = CoordinatorData(public_ip=public_ip, records=records_out, last_checked=now)
-            await self._async_auto_sync_records(zone_id, data)
-            out_of_sync = [rs.name for rs in data.records.values() if not rs.in_sync]
-            self.activity_log.info(
-                "Poll complete",
-                public_ip=public_ip,
-                records_checked=len(data.records),
-                out_of_sync=out_of_sync,
-                auto_sync=bool(self.entry.options.get(CONF_AUTO_SYNC, DEFAULT_AUTO_SYNC)),
-            )
-            return data
-        except ProviderAuthError as err:
-            self.activity_log.error("Poll failed: authentication", error=str(err))
-            raise UpdateFailed(str(err)) from err
-        except (aiohttp.ClientError, DNSManagerError) as err:
-            self.activity_log.error("Poll failed", error=str(err))
-            raise UpdateFailed(str(err)) from err
+        data = CoordinatorData(public_ip=public_ip, records=records_out, last_checked=now)
+        await self._async_auto_sync_records(data)
 
-    async def _async_auto_sync_records(self, zone_id: str, data: CoordinatorData) -> None:
+        out_of_sync = [rs.name for rs in data.records.values() if not rs.in_sync]
+        self.activity_log.info(
+            "Poll complete",
+            public_ip=public_ip or None,
+            public_ip_error=public_ip_error,
+            records_checked=len(data.records),
+            out_of_sync=out_of_sync,
+            auto_sync=bool(self.entry.options.get(CONF_AUTO_SYNC, DEFAULT_AUTO_SYNC)),
+        )
+
+        if public_ip_error and not records_out:
+            raise UpdateFailed(public_ip_error)
+        if poll_errors and not any(rs.current_ip for rs in records_out.values()) and public_ip_error:
+            raise UpdateFailed("; ".join(poll_errors))
+
+        return data
+
+    async def _async_auto_sync_records(self, data: CoordinatorData) -> None:
         """Update provider when auto_sync is enabled and a record is out of sync."""
         if not self.entry.options.get(CONF_AUTO_SYNC, DEFAULT_AUTO_SYNC):
             return
 
         now = datetime.now(timezone.utc)
-        for record_id, rs in data.records.items():
-            if rs.in_sync or not rs.expected_ip:
+        for rec_cfg in self._managed_records():
+            if rec_cfg.get(CONF_ENABLED, True) is not True:
+                continue
+            uid = record_uid(rec_cfg)
+            rs = data.records.get(uid)
+            if rs is None or rs.in_sync or not rs.expected_ip:
                 continue
             try:
-                current = await self.provider.get_record(zone_id, record_id)
-                await self.provider.update_record(zone_id, current, rs.expected_ip)
-                data.records[record_id] = RecordStatus(
-                    record_id=rs.record_id,
+                provider = get_provider_for_record(rec_cfg, self.entry)
+                zone_id = zone_id_for_record(rec_cfg, self.entry)
+                prov_rec_id = provider_record_id(rec_cfg)
+                current = await provider.get_record(zone_id, prov_rec_id)
+                await provider.update_record(zone_id, current, rs.expected_ip)
+                data.records[uid] = RecordStatus(
+                    record_id=uid,
                     name=rs.name,
                     current_ip=rs.expected_ip,
                     expected_ip=rs.expected_ip,
                     in_sync=True,
                     last_updated=now,
+                    provider_type=rs.provider_type,
                 )
                 self.activity_log.info(
                     "Auto-sync updated DNS record",
-                    record_id=record_id,
+                    record_uid=uid,
                     name=rs.name,
                     ip=rs.expected_ip,
+                    provider=rs.provider_type,
                 )
             except DNSManagerError as err:
                 self.activity_log.error(
                     "Auto-sync failed",
-                    record_id=record_id,
+                    record_uid=uid,
                     name=rs.name,
+                    provider=rs.provider_type,
                     error=str(err),
                 )
 
-    def set_last_updated(self, record_id: str) -> None:
+    def set_last_updated(self, record_uid_key: str) -> None:
         """Mark a record as updated now (used by services)."""
-        if not self.data or record_id not in self.data.records:
+        if not self.data or record_uid_key not in self.data.records:
             return
-        rs = self.data.records[record_id]
-        self.data.records[record_id] = RecordStatus(
+        rs = self.data.records[record_uid_key]
+        self.data.records[record_uid_key] = RecordStatus(
             record_id=rs.record_id,
             name=rs.name,
             current_ip=rs.current_ip,
             expected_ip=rs.expected_ip,
             in_sync=rs.in_sync,
             last_updated=datetime.now(timezone.utc),
+            provider_type=rs.provider_type,
         )
-

@@ -13,8 +13,8 @@ from .const import (
     ATTR_RECORD_NAME,
     CONF_ENABLED,
     CONF_IP_MODE,
+    CONF_PROVIDER_TYPE,
     CONF_RECORDS,
-    CONF_RECORD_ID,
     CONF_RECORD_NAME,
     CONF_STATIC_IP,
     DOMAIN,
@@ -25,7 +25,14 @@ from .const import (
 )
 from .coordinator import DnsManagerCoordinator
 from .exceptions import DNSManagerError
+from .providers import get_provider_for_record
 from .providers.base import DnsRecord
+from .providers.record_context import (
+    normalize_record,
+    provider_record_id,
+    record_uid,
+    zone_id_for_record,
+)
 
 
 def _validate_ipv4(value: str) -> str:
@@ -86,15 +93,10 @@ async def async_update_all_records(coord: DnsManagerCoordinator) -> None:
     log = coord.entry.runtime_data.activity_log
     try:
         log.info("Updating all managed DNS records")
-        entry = coord.entry
-        zone_id = entry.data["zone_id"]
-
-        for rec_cfg in entry.options.get(CONF_RECORDS, []):
+        for rec_cfg in normalize_records(coord):
             if rec_cfg.get(CONF_ENABLED, True) is not True:
                 continue
-            record_id = str(rec_cfg[CONF_RECORD_ID])
-            await async_update_record_by_id(coord, record_id)
-
+            await async_update_record_by_uid(coord, record_uid(rec_cfg))
         await coord.async_request_refresh()
         log.info("All managed DNS records update finished")
     except DNSManagerError as err:
@@ -102,41 +104,47 @@ async def async_update_all_records(coord: DnsManagerCoordinator) -> None:
         raise HomeAssistantError(str(err)) from err
 
 
-async def async_update_record_by_id(coord: DnsManagerCoordinator, record_id: str) -> None:
+def normalize_records(coord: DnsManagerCoordinator) -> list[dict]:
+    return [normalize_record(r, coord.entry) for r in coord.entry.options.get(CONF_RECORDS, [])]
+
+
+async def async_update_record_by_uid(coord: DnsManagerCoordinator, uid: str) -> None:
     log = coord.entry.runtime_data.activity_log
+    rec_cfgs = [r for r in normalize_records(coord) if record_uid(r) == uid]
+    if not rec_cfgs:
+        return
+    rec_cfg = rec_cfgs[0]
+    record_name = str(rec_cfg.get(CONF_RECORD_NAME, uid))
+
     try:
-        entry = coord.entry
-        zone_id = entry.data["zone_id"]
-
-        rec_cfgs = [r for r in entry.options.get(CONF_RECORDS, []) if str(r.get(CONF_RECORD_ID)) == record_id]
-        if not rec_cfgs:
-            return
-        rec_cfg = rec_cfgs[0]
-        record_name = str(rec_cfg.get(CONF_RECORD_NAME, record_id))
-
         expected = _expected_ip(coord, rec_cfg, ip_override=None)
         if not expected:
-            log.warning("Update skipped: no expected IP", record_id=record_id, name=record_name)
+            log.warning("Update skipped: no expected IP", record_uid=uid, name=record_name)
             return
+
+        provider = get_provider_for_record(rec_cfg, coord.entry)
+        zone_id = zone_id_for_record(rec_cfg, coord.entry)
+        prov_rec_id = provider_record_id(rec_cfg)
 
         log.info(
             "Updating DNS record",
-            record_id=record_id,
+            record_uid=uid,
             name=record_name,
+            provider=rec_cfg.get(CONF_PROVIDER_TYPE),
             expected_ip=expected,
         )
-        current: DnsRecord = await coord.provider.get_record(zone_id, record_id)
-        await coord.provider.update_record(zone_id, current, expected)
-        coord.set_last_updated(record_id)
-        log.info(
-            "DNS record updated",
-            record_id=record_id,
-            name=record_name,
-            ip=expected,
-        )
+        current: DnsRecord = await provider.get_record(zone_id, prov_rec_id)
+        await provider.update_record(zone_id, current, expected)
+        coord.set_last_updated(uid)
+        log.info("DNS record updated", record_uid=uid, name=record_name, ip=expected)
     except DNSManagerError as err:
-        log.error("DNS record update failed", record_id=record_id, error=str(err))
+        log.error("DNS record update failed", record_uid=uid, error=str(err))
         raise HomeAssistantError(str(err)) from err
+
+
+async def async_update_record_by_id(coord: DnsManagerCoordinator, record_id: str) -> None:
+    """Backward-compatible alias: record_id is now record_uid."""
+    await async_update_record_by_uid(coord, record_id)
 
 
 async def async_update_record_by_name(
@@ -145,25 +153,24 @@ async def async_update_record_by_name(
     ip_override: str | None,
 ) -> None:
     try:
-        entry = coord.entry
-        zone_id = entry.data["zone_id"]
-
-        for rec_cfg in entry.options.get(CONF_RECORDS, []):
+        for rec_cfg in normalize_records(coord):
             if str(rec_cfg.get(CONF_RECORD_NAME, "")).lower() != record_name.lower():
                 continue
             if rec_cfg.get(CONF_ENABLED, True) is not True:
                 continue
 
-            record_id = str(rec_cfg[CONF_RECORD_ID])
+            uid = record_uid(rec_cfg)
             expected = _expected_ip(coord, rec_cfg, ip_override=ip_override)
             if not expected:
                 continue
 
-            current: DnsRecord = await coord.provider.get_record(zone_id, record_id)
-            await coord.provider.update_record(zone_id, current, expected)
-            coord.set_last_updated(record_id)
+            provider = get_provider_for_record(rec_cfg, coord.entry)
+            zone_id = zone_id_for_record(rec_cfg, coord.entry)
+            prov_rec_id = provider_record_id(rec_cfg)
+            current: DnsRecord = await provider.get_record(zone_id, prov_rec_id)
+            await provider.update_record(zone_id, current, expected)
+            coord.set_last_updated(uid)
 
         await coord.async_request_refresh()
     except DNSManagerError as err:
         raise HomeAssistantError(str(err)) from err
-

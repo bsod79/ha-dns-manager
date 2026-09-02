@@ -9,10 +9,11 @@ from homeassistant.helpers.entity_platform import AddEntitiesCallback
 
 from .const import (
     CONF_ENABLED,
-    CONF_RECORD_ID,
+    CONF_PROVIDER_TYPE,
     CONF_RECORD_NAME,
     CONF_RECORDS,
     CONF_RECORD_TYPE,
+    PROVIDER_LABELS,
     RECORD_STATUS_NOT_READY,
     RECORD_STATUS_OPTIONS,
     RECORD_STATUS_READY,
@@ -20,6 +21,7 @@ from .const import (
 )
 from .coordinator import DnsManagerCoordinator
 from .entity_base import DnsManagerEntity
+from .providers.record_context import normalize_record, record_uid
 
 
 async def async_setup_entry(
@@ -31,10 +33,11 @@ async def async_setup_entry(
     entities: list[SensorEntity] = [PublicIpSensor(coordinator, entry)]
 
     for rec_cfg in entry.options.get(CONF_RECORDS, []):
-        if rec_cfg.get(CONF_ENABLED, True) is not True:
+        rec = normalize_record(rec_cfg, entry)
+        if rec.get(CONF_ENABLED, True) is not True:
             continue
-        record_id = str(rec_cfg[CONF_RECORD_ID])
-        entities.append(ManagedRecordStatusSensor(coordinator, entry, record_id))
+        uid = record_uid(rec)
+        entities.append(ManagedRecordStatusSensor(coordinator, entry, uid))
 
     async_add_entities(entities)
 
@@ -66,30 +69,34 @@ class ManagedRecordStatusSensor(DnsManagerEntity, SensorEntity):
     _attr_options = list(RECORD_STATUS_OPTIONS)
     _attr_translation_key = "record_status"
 
-    def __init__(self, coordinator: DnsManagerCoordinator, entry: ConfigEntry, record_id: str) -> None:
+    def __init__(self, coordinator: DnsManagerCoordinator, entry: ConfigEntry, record_uid_key: str) -> None:
         super().__init__(coordinator, entry)
-        self.record_id = record_id
-        self._attr_unique_id = f"dns_manager_{entry.entry_id}_{record_id}_record_status"
+        self.record_uid_key = record_uid_key
+        self._attr_unique_id = f"dns_manager_{entry.entry_id}_{record_uid_key}_record_status"
 
     def _record_options_row(self) -> dict | None:
         for rec in self.entry.options.get(CONF_RECORDS, []):
-            if str(rec.get(CONF_RECORD_ID)) == self.record_id:
-                return rec
+            if record_uid(normalize_record(rec, self.entry)) == self.record_uid_key:
+                return normalize_record(rec, self.entry)
         return None
 
     @property
     def name(self) -> str | None:
-        rs = self.coordinator.data.records.get(self.record_id) if self.coordinator.data else None
+        rs = self.coordinator.data.records.get(self.record_uid_key) if self.coordinator.data else None
         row = self._record_options_row()
-        display = rs.name if rs else (str(row.get(CONF_RECORD_NAME, self.record_id)) if row else self.record_id)
+        display = rs.name if rs else (str(row.get(CONF_RECORD_NAME, self.record_uid_key)) if row else self.record_uid_key)
         rtype = str(row.get(CONF_RECORD_TYPE, "A")) if row else "A"
+        provider = str(row.get(CONF_PROVIDER_TYPE, "")) if row else ""
+        if provider:
+            plabel = PROVIDER_LABELS.get(provider, provider)
+            return f"{display} ({rtype}) — {plabel}"
         return f"{display} ({rtype})"
 
     @property
     def native_value(self) -> str:
         if not self.coordinator.data:
             return RECORD_STATUS_UNKNOWN
-        rs = self.coordinator.data.records.get(self.record_id)
+        rs = self.coordinator.data.records.get(self.record_uid_key)
         if rs is None:
             return RECORD_STATUS_UNKNOWN
         return RECORD_STATUS_READY if rs.in_sync else RECORD_STATUS_NOT_READY
@@ -110,25 +117,28 @@ class ManagedRecordStatusSensor(DnsManagerEntity, SensorEntity):
             if not row:
                 return None
             return {
-                "record_id": self.record_id,
+                "record_uid": self.record_uid_key,
                 "record_name": str(row.get(CONF_RECORD_NAME, "")),
                 "record_type": str(row.get(CONF_RECORD_TYPE, "A")),
+                "provider": str(row.get(CONF_PROVIDER_TYPE, "")),
                 "poll_status": "pending",
             }
-        rs = self.coordinator.data.records.get(self.record_id)
+        rs = self.coordinator.data.records.get(self.record_uid_key)
         if not rs:
             base: dict[str, str] = {
-                "record_id": self.record_id,
+                "record_uid": self.record_uid_key,
                 "record_type": str(row.get(CONF_RECORD_TYPE, "A")) if row else "A",
                 "poll_status": "missing_status",
             }
             if row:
                 base["record_name"] = str(row.get(CONF_RECORD_NAME, ""))
+                base["provider"] = str(row.get(CONF_PROVIDER_TYPE, ""))
             return base
         attrs: dict[str, str] = {
-            "record_id": rs.record_id,
+            "record_uid": rs.record_id,
             "record_name": rs.name,
             "record_type": str(row.get(CONF_RECORD_TYPE, "A")) if row else "A",
+            "provider": rs.provider_type or (str(row.get(CONF_PROVIDER_TYPE, "")) if row else ""),
             "current_ip": rs.current_ip,
             "expected_ip": rs.expected_ip,
             "in_sync": str(rs.in_sync),
