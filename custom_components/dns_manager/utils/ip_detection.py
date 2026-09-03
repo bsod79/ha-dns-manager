@@ -18,11 +18,13 @@ IP_DETECTION_SERVICES: list[str] = [
 
 def _parse_ip_payload(text: str, data: Any) -> str | None:
     if isinstance(data, dict):
-        ip = data.get("ip")
-        if isinstance(ip, str):
-            return ip.strip()
+        for key in ("ip", "origin", "query", "IPv4", "ipv4"):
+            value = data.get(key)
+            if isinstance(value, str) and value.strip():
+                return value.strip()
     if isinstance(text, str) and text.strip():
-        return text.strip()
+        # Take first token/line in case of trailing whitespace or comments.
+        return text.strip().split()[0].split(",")[0].strip()
     return None
 
 
@@ -32,6 +34,27 @@ def _validate_ipv4(value: str) -> str:
     except Exception as err:  # noqa: BLE001
         raise IPDetectionError(f"Invalid IPv4 returned: {value}") from err
     return str(ip)
+
+
+async def detect_ip_from_url(session: aiohttp.ClientSession, url: str) -> str:
+    """Fetch an IPv4 from a single URL (plain text or JSON with an IP field)."""
+    try:
+        async with session.get(url, timeout=aiohttp.ClientTimeout(total=10)) as resp:
+            if resp.status >= 400:
+                raise IPDetectionError(f"HTTP {resp.status} from {url}")
+            text = await resp.text()
+            data: Any = None
+            try:
+                data = await resp.json(content_type=None)
+            except Exception:  # noqa: BLE001
+                data = None
+    except aiohttp.ClientError as err:
+        raise IPDetectionError(f"Failed to fetch IP from {url}") from err
+
+    ip = _parse_ip_payload(text, data)
+    if not ip:
+        raise IPDetectionError(f"No IP in response from {url}")
+    return _validate_ipv4(ip)
 
 
 async def detect_public_ip(
@@ -45,21 +68,9 @@ async def detect_public_ip(
 
     for url in urls:
         try:
-            async with session.get(url, timeout=aiohttp.ClientTimeout(total=10)) as resp:
-                text = await resp.text()
-                data: Any = None
-                try:
-                    data = await resp.json(content_type=None)
-                except Exception:  # noqa: BLE001
-                    data = None
-
-            ip = _parse_ip_payload(text, data)
-            if not ip:
-                raise IPDetectionError(f"No IP in response from {url}")
-            return _validate_ipv4(ip)
+            return await detect_ip_from_url(session, url)
         except Exception as err:  # noqa: BLE001
             last_err = err
             continue
 
     raise IPDetectionError("All IP detection services failed") from last_err
-

@@ -55,9 +55,17 @@ CONF_RECORD_NAME = "name"
 CONF_RECORD_TYPE = "record_type"
 CONF_IP_MODE = "ip_mode"
 IP_MODE_AUTO = "auto"
+IP_MODE_URL = "url"
 IP_MODE_STATIC = "static"
 CONF_STATIC_IP = "static_ip"
+CONF_IP_URL = "ip_url"
 CONF_ENABLED = "enabled"
+
+IP_MODE_LABELS: dict[str, str] = {
+    IP_MODE_AUTO: "Auto (instance public IP)",
+    IP_MODE_URL: "From URL",
+    IP_MODE_STATIC: "Static IP",
+}
 
 DEFAULT_SCAN_INTERVAL = 300
 DEFAULT_AUTO_SYNC = False

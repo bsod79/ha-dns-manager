@@ -9,10 +9,13 @@ from homeassistant.helpers.entity_platform import AddEntitiesCallback
 
 from .const import (
     CONF_ENABLED,
+    CONF_IP_MODE,
+    CONF_IP_URL,
     CONF_PROVIDER_TYPE,
     CONF_RECORD_NAME,
     CONF_RECORDS,
     CONF_RECORD_TYPE,
+    CONF_STATIC_IP,
     PROVIDER_LABELS,
     RECORD_STATUS_NOT_READY,
     RECORD_STATUS_OPTIONS,
@@ -139,10 +142,15 @@ class ManagedRecordStatusSensor(DnsManagerEntity, SensorEntity):
             "record_name": rs.name,
             "record_type": str(row.get(CONF_RECORD_TYPE, "A")) if row else "A",
             "provider": rs.provider_type or (str(row.get(CONF_PROVIDER_TYPE, "")) if row else ""),
+            "ip_mode": str(row.get(CONF_IP_MODE, "")) if row else "",
             "current_ip": rs.current_ip,
             "expected_ip": rs.expected_ip,
             "in_sync": str(rs.in_sync),
         }
+        if row and row.get(CONF_IP_URL):
+            attrs["ip_url"] = str(row.get(CONF_IP_URL))
+        if row and row.get(CONF_STATIC_IP):
+            attrs["static_ip"] = str(row.get(CONF_STATIC_IP))
         if rs.last_updated:
             attrs["last_updated"] = rs.last_updated.isoformat()
         return attrs

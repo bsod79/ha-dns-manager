@@ -17,7 +17,10 @@ Each managed record stores its **own provider and credentials**. One integration
 ## Setup flow
 
 1. Add integration **DNS Manager** (name your instance).
-2. Open **Options** → **Add managed record** → choose provider → enter credentials → IP strategy (auto public IP or static).
+2. Open **Options** → **Add managed record** → choose provider → enter credentials → IP strategy:
+   - **Auto** — instance public IP (global detection URL)
+   - **From URL** — fetch IPv4 from a custom URL (plain text or JSON with `ip`)
+   - **Static** — fixed IPv4
 3. Optional: **General settings** → enable **auto_sync** to update DNS automatically when out of sync.
 
 ## Polling vs updates

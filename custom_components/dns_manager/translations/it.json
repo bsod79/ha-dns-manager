@@ -75,6 +75,31 @@
           "hostname": "Hostname (FQDN)",
           "token": "Token"
         }
+      },
+      "add_record_strategy": {
+        "title": "Impostazioni record",
+        "data": {
+          "ip_mode": "Strategia IP",
+          "static_ip": "IPv4 statico",
+          "ip_url": "URL rilevamento IP"
+        },
+        "data_description": {
+          "ip_mode": "Auto usa l'IP pubblico dell'istanza. URL recupera un IPv4 da un endpoint. Statico usa un indirizzo fisso.",
+          "ip_url": "Usato se la strategia è From URL. Accetta testo semplice o JSON con campo ip."
+        }
+      },
+      "edit_record_strategy": {
+        "title": "Impostazioni record",
+        "data": {
+          "ip_mode": "Strategia IP",
+          "static_ip": "IPv4 statico",
+          "ip_url": "URL rilevamento IP",
+          "enabled": "Abilitato"
+        },
+        "data_description": {
+          "ip_mode": "Auto usa l'IP pubblico dell'istanza. URL recupera un IPv4 da un endpoint. Statico usa un indirizzo fisso.",
+          "ip_url": "Usato se la strategia è From URL. Accetta testo semplice o JSON con campo ip."
+        }
       }
     },
     "abort": {

@@ -22,6 +22,7 @@ from .const import (
     CONF_HOSTNAME,
     CONF_IP_DETECTION_URL,
     CONF_IP_MODE,
+    CONF_IP_URL,
     CONF_PASSWORD,
     CONF_PROVIDER_CONFIG,
     CONF_PROVIDER_TYPE,
@@ -41,14 +42,15 @@ from .const import (
     DEFAULT_IP_DETECTION_URL,
     DEFAULT_SCAN_INTERVAL,
     IP_MODE_AUTO,
+    IP_MODE_LABELS,
     IP_MODE_STATIC,
+    IP_MODE_URL,
     PROVIDER_CLOUDFLARE,
     PROVIDER_DUCKDNS,
     PROVIDER_DYNV6,
     PROVIDER_DYNDNS,
     PROVIDER_LABELS,
     PROVIDER_NOIP,
-    ZONE_BASED_PROVIDERS,
 )
 from .exceptions import ProviderAPIError, ProviderAuthError
 from .providers import get_provider
@@ -59,6 +61,42 @@ from .providers.record_context import normalize_record, record_display_label, re
 
 def _validate_ipv4(value: str) -> str:
     return str(ipaddress.IPv4Address(value))
+
+
+def _parse_ip_strategy(user_input: dict[str, Any]) -> tuple[str, str | None, str | None]:
+    """Validate and normalize ip_mode / static_ip / ip_url from a form."""
+    ip_mode = str(user_input[CONF_IP_MODE])
+    static_ip: str | None = None
+    ip_url: str | None = None
+
+    if ip_mode == IP_MODE_STATIC:
+        static_ip = _validate_ipv4(str(user_input.get(CONF_STATIC_IP, "")).strip())
+    elif ip_mode == IP_MODE_URL:
+        ip_url = str(user_input.get(CONF_IP_URL, "")).strip()
+        if not ip_url.startswith(("http://", "https://")):
+            raise ValueError("invalid_url")
+    elif ip_mode != IP_MODE_AUTO:
+        raise ValueError("invalid_ip_mode")
+
+    return ip_mode, static_ip, ip_url
+
+
+def _ip_strategy_schema(
+    *,
+    default_mode: str = IP_MODE_AUTO,
+    default_static: str = "",
+    default_url: str = "",
+    include_enabled: bool = False,
+    enabled_default: bool = True,
+) -> vol.Schema:
+    fields: dict[Any, Any] = {
+        vol.Required(CONF_IP_MODE, default=default_mode): vol.In(IP_MODE_LABELS),
+        vol.Optional(CONF_STATIC_IP, default=default_static): str,
+        vol.Optional(CONF_IP_URL, default=default_url): str,
+    }
+    if include_enabled:
+        fields[vol.Optional(CONF_ENABLED, default=enabled_default)] = bool
+    return vol.Schema(fields)
 
 
 class DnsManagerConfigFlow(config_entries.ConfigFlow, domain="dns_manager"):
@@ -422,10 +460,7 @@ class DnsManagerOptionsFlow(config_entries.OptionsFlow):
         errors: dict[str, str] = {}
         if user_input is not None:
             try:
-                ip_mode = user_input[CONF_IP_MODE]
-                static_ip = None
-                if ip_mode == IP_MODE_STATIC:
-                    static_ip = _validate_ipv4(str(user_input[CONF_STATIC_IP]))
+                ip_mode, static_ip, ip_url = _parse_ip_strategy(user_input)
 
                 new_record = {
                     CONF_RECORD_UID: str(uuid.uuid4()),
@@ -436,6 +471,7 @@ class DnsManagerOptionsFlow(config_entries.OptionsFlow):
                     CONF_RECORD_TYPE: self._adding_record_type,
                     CONF_IP_MODE: ip_mode,
                     CONF_STATIC_IP: static_ip,
+                    CONF_IP_URL: ip_url,
                     CONF_ENABLED: True,
                 }
                 new_records = self._managed_records()
@@ -444,15 +480,11 @@ class DnsManagerOptionsFlow(config_entries.OptionsFlow):
             except Exception:  # noqa: BLE001
                 errors["base"] = "invalid_ip"
 
-        schema = vol.Schema(
-            {
-                vol.Required(CONF_IP_MODE, default=IP_MODE_AUTO): vol.In(
-                    {IP_MODE_AUTO: "Auto (public IP)", IP_MODE_STATIC: "Static IP"}
-                ),
-                vol.Optional(CONF_STATIC_IP): str,
-            }
+        return self.async_show_form(
+            step_id="add_record_strategy",
+            data_schema=_ip_strategy_schema(),
+            errors=errors,
         )
-        return self.async_show_form(step_id="add_record_strategy", data_schema=schema, errors=errors)
 
     async def async_step_edit_record_select(self, user_input: dict[str, Any] | None = None) -> FlowResult:
         managed = self._managed_records()
@@ -481,10 +513,7 @@ class DnsManagerOptionsFlow(config_entries.OptionsFlow):
 
         if user_input is not None:
             try:
-                ip_mode = user_input[CONF_IP_MODE]
-                static_ip = None
-                if ip_mode == IP_MODE_STATIC:
-                    static_ip = _validate_ipv4(str(user_input[CONF_STATIC_IP]))
+                ip_mode, static_ip, ip_url = _parse_ip_strategy(user_input)
                 enabled = bool(user_input.get(CONF_ENABLED, True))
 
                 new_records: list[dict[str, Any]] = []
@@ -495,6 +524,7 @@ class DnsManagerOptionsFlow(config_entries.OptionsFlow):
                     updated = dict(r)
                     updated[CONF_IP_MODE] = ip_mode
                     updated[CONF_STATIC_IP] = static_ip
+                    updated[CONF_IP_URL] = ip_url
                     updated[CONF_ENABLED] = enabled
                     new_records.append(updated)
 
@@ -502,16 +532,17 @@ class DnsManagerOptionsFlow(config_entries.OptionsFlow):
             except Exception:  # noqa: BLE001
                 errors["base"] = "invalid_ip"
 
-        schema = vol.Schema(
-            {
-                vol.Required(CONF_IP_MODE, default=rec.get(CONF_IP_MODE, IP_MODE_AUTO)): vol.In(
-                    {IP_MODE_AUTO: "Auto (public IP)", IP_MODE_STATIC: "Static IP"}
-                ),
-                vol.Optional(CONF_STATIC_IP, default=rec.get(CONF_STATIC_IP) or ""): str,
-                vol.Optional(CONF_ENABLED, default=bool(rec.get(CONF_ENABLED, True))): bool,
-            }
+        return self.async_show_form(
+            step_id="edit_record_strategy",
+            data_schema=_ip_strategy_schema(
+                default_mode=str(rec.get(CONF_IP_MODE, IP_MODE_AUTO)),
+                default_static=str(rec.get(CONF_STATIC_IP) or ""),
+                default_url=str(rec.get(CONF_IP_URL) or ""),
+                include_enabled=True,
+                enabled_default=bool(rec.get(CONF_ENABLED, True)),
+            ),
+            errors=errors,
         )
-        return self.async_show_form(step_id="edit_record_strategy", data_schema=schema, errors=errors)
 
     async def async_step_remove_record_select(self, user_input: dict[str, Any] | None = None) -> FlowResult:
         managed = self._managed_records()

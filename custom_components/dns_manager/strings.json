@@ -101,7 +101,12 @@
         "title": "Record settings",
         "data": {
           "ip_mode": "IP strategy",
-          "static_ip": "Static IPv4"
+          "static_ip": "Static IPv4",
+          "ip_url": "IP detection URL"
+        },
+        "data_description": {
+          "ip_mode": "Auto uses the instance public IP. URL fetches an IPv4 from a custom endpoint. Static uses a fixed address.",
+          "ip_url": "Used when IP strategy is From URL. Accepts plain text or JSON with an ip field."
         }
       },
       "edit_record_select": {
@@ -115,7 +120,12 @@
         "data": {
           "ip_mode": "IP strategy",
           "static_ip": "Static IPv4",
+          "ip_url": "IP detection URL",
           "enabled": "Enabled"
+        },
+        "data_description": {
+          "ip_mode": "Auto uses the instance public IP. URL fetches an IPv4 from a custom endpoint. Static uses a fixed address.",
+          "ip_url": "Used when IP strategy is From URL. Accepts plain text or JSON with an ip field."
         }
       },
       "remove_record_select": {

@@ -17,18 +17,16 @@ from .const import (
     CONF_AUTO_SYNC,
     CONF_ENABLED,
     CONF_IP_DETECTION_URL,
-    CONF_IP_MODE,
     CONF_PROVIDER_TYPE,
     CONF_RECORDS,
     CONF_RECORD_NAME,
     CONF_SCAN_INTERVAL,
-    CONF_STATIC_IP,
     DEFAULT_AUTO_SYNC,
     DEFAULT_IP_DETECTION_URL,
     DEFAULT_SCAN_INTERVAL,
-    IP_MODE_AUTO,
 )
-from .exceptions import DNSManagerError, ProviderAuthError
+from .exceptions import DNSManagerError, IPDetectionError, ProviderAuthError
+from .expected_ip import resolve_expected_ip
 from .providers import get_provider_for_record
 from .providers.record_context import (
     normalize_record,
@@ -107,11 +105,15 @@ class DnsManagerCoordinator(DataUpdateCoordinator[CoordinatorData]):
 
             uid = record_uid(rec_cfg)
             record_name = str(rec_cfg.get(CONF_RECORD_NAME, uid))
-            ip_mode = rec_cfg.get(CONF_IP_MODE, IP_MODE_AUTO)
-            if ip_mode == IP_MODE_AUTO:
-                expected_ip = public_ip
-            else:
-                expected_ip = str(rec_cfg.get(CONF_STATIC_IP, "") or "")
+            expected_ip = ""
+            try:
+                expected_ip = await resolve_expected_ip(session, rec_cfg, public_ip=public_ip)
+            except IPDetectionError as err:
+                self.activity_log.warning(
+                    "Expected IP resolution failed",
+                    record=record_name,
+                    error=str(err),
+                )
 
             last_updated = None
             if self.data and uid in self.data.records:

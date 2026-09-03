@@ -6,25 +6,24 @@ import ipaddress
 
 from homeassistant.core import HomeAssistant, ServiceCall
 from homeassistant.exceptions import HomeAssistantError
+from homeassistant.helpers.aiohttp_client import async_get_clientsession
 
 from .const import (
     ATTR_CONFIG_ENTRY_ID,
     ATTR_IP_OVERRIDE,
     ATTR_RECORD_NAME,
     CONF_ENABLED,
-    CONF_IP_MODE,
     CONF_PROVIDER_TYPE,
     CONF_RECORDS,
     CONF_RECORD_NAME,
-    CONF_STATIC_IP,
     DOMAIN,
-    IP_MODE_AUTO,
     SERVICE_REFRESH_STATUS,
     SERVICE_UPDATE_ALL,
     SERVICE_UPDATE_RECORD,
 )
 from .coordinator import DnsManagerCoordinator
 from .exceptions import DNSManagerError
+from .expected_ip import resolve_expected_ip
 from .providers import get_provider_for_record
 from .providers.base import DnsRecord
 from .providers.record_context import (
@@ -81,12 +80,20 @@ async def async_unregister_services(hass: HomeAssistant) -> None:
             hass.services.async_remove(DOMAIN, name)
 
 
-def _expected_ip(coord: DnsManagerCoordinator, rec_cfg: dict, *, ip_override: str | None) -> str:
-    if ip_override:
-        return ip_override
-    if rec_cfg.get(CONF_IP_MODE) == IP_MODE_AUTO:
-        return coord.data.public_ip if coord.data else ""
-    return str(rec_cfg.get(CONF_STATIC_IP, "") or "")
+async def _async_expected_ip(
+    coord: DnsManagerCoordinator,
+    rec_cfg: dict,
+    *,
+    ip_override: str | None,
+) -> str:
+    session = async_get_clientsession(coord.hass)
+    public_ip = coord.data.public_ip if coord.data else ""
+    return await resolve_expected_ip(
+        session,
+        rec_cfg,
+        public_ip=public_ip,
+        ip_override=ip_override,
+    )
 
 
 async def async_update_all_records(coord: DnsManagerCoordinator) -> None:
@@ -117,7 +124,7 @@ async def async_update_record_by_uid(coord: DnsManagerCoordinator, uid: str) -> 
     record_name = str(rec_cfg.get(CONF_RECORD_NAME, uid))
 
     try:
-        expected = _expected_ip(coord, rec_cfg, ip_override=None)
+        expected = await _async_expected_ip(coord, rec_cfg, ip_override=None)
         if not expected:
             log.warning("Update skipped: no expected IP", record_uid=uid, name=record_name)
             return
@@ -160,7 +167,7 @@ async def async_update_record_by_name(
                 continue
 
             uid = record_uid(rec_cfg)
-            expected = _expected_ip(coord, rec_cfg, ip_override=ip_override)
+            expected = await _async_expected_ip(coord, rec_cfg, ip_override=ip_override)
             if not expected:
                 continue
 
