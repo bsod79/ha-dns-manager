@@ -3,7 +3,7 @@
     "error": {
       "cannot_connect": "Cannot connect",
       "invalid_auth": "Invalid authentication",
-      "invalid_ip": "Invalid IP address",
+      "invalid_ip": "Invalid IP address or URL",
       "record_already_managed": "Record is already managed",
       "unknown": "Unexpected error"
     }
@@ -14,32 +14,31 @@
         "title": "DNS Manager",
         "menu_options": {
           "general": "General settings",
-          "add_record_provider": "Add managed record",
+          "providers_menu": "Manage providers",
+          "add_record_select_provider": "Add managed record",
           "edit_record_select": "Edit managed record",
           "remove_record_select": "Remove managed record"
         }
       },
-      "general": {
-        "title": "General settings",
-        "data": {
-          "scan_interval": "Polling interval (seconds)",
-          "ip_detection_url": "Public IP detection URL",
-          "auto_sync": "Automatically update DNS when out of sync"
-        },
-        "data_description": {
-          "scan_interval": "How often to check public IP and record status (default 300 s).",
-          "auto_sync": "When enabled, each poll also writes DNS records that are not aligned. When disabled, use Update buttons or services."
+      "providers_menu": {
+        "title": "Providers",
+        "menu_options": {
+          "add_provider_type": "Add provider",
+          "remove_provider_select": "Remove provider"
         }
       },
-      "add_record_provider": {
-        "title": "Choose DNS provider",
+      "add_record_select_provider": {
+        "title": "Add managed record",
+        "description": "Choose a saved provider. Credentials are reused.",
         "data": {
-          "provider_type": "Provider"
+          "provider_id": "Provider"
         }
       }
     },
     "abort": {
-      "no_managed_records": "No managed records yet."
+      "no_managed_records": "No managed records yet.",
+      "no_providers": "Add a provider first (Options → Manage providers).",
+      "provider_in_use": "Cannot remove: one or more records still use this provider."
     }
   },
   "entity": {

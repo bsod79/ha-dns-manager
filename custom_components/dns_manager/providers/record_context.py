@@ -8,8 +8,8 @@ from typing import Any
 from homeassistant.config_entries import ConfigEntry
 
 from ..const import (
-    CONF_CREDENTIALS,
     CONF_PROVIDER_CONFIG,
+    CONF_PROVIDER_ID,
     CONF_PROVIDER_TYPE,
     CONF_RECORD_ID,
     CONF_RECORD_NAME,
@@ -19,6 +19,7 @@ from ..const import (
     PROVIDER_CLOUDFLARE,
     PROVIDER_LABELS,
 )
+from ..options_model import find_provider, resolve_provider_bundle
 from .base import ProviderConfig
 
 
@@ -32,32 +33,24 @@ def record_uid(rec: dict[str, Any]) -> str:
 
 
 def normalize_record(rec: dict[str, Any], entry: ConfigEntry) -> dict[str, Any]:
-    """Ensure record has uid, provider_type, and provider_config (legacy migration)."""
+    """Ensure record has uid and resolved provider fields for runtime use."""
     out = dict(rec)
     if not out.get(CONF_RECORD_UID):
         out[CONF_RECORD_UID] = out.get(CONF_RECORD_ID) or str(uuid.uuid4())
 
-    if not out.get(CONF_PROVIDER_TYPE) and entry.data.get(CONF_PROVIDER_TYPE):
-        out[CONF_PROVIDER_TYPE] = entry.data[CONF_PROVIDER_TYPE]
-
-    if not out.get(CONF_PROVIDER_CONFIG) and entry.data.get(CONF_CREDENTIALS):
-        out[CONF_PROVIDER_CONFIG] = {
-            **dict(entry.data[CONF_CREDENTIALS]),
-            CONF_ZONE_ID: entry.data.get(CONF_ZONE_ID),
-        }
-
-    if not out.get(CONF_PROVIDER_TYPE):
-        out[CONF_PROVIDER_TYPE] = PROVIDER_CLOUDFLARE
-
+    provider_type, provider_config = resolve_provider_bundle(out, entry)
+    out[CONF_PROVIDER_TYPE] = provider_type
+    out[CONF_PROVIDER_CONFIG] = provider_config
     return out
 
 
 def provider_config_for_record(rec: dict[str, Any], entry: ConfigEntry) -> ProviderConfig:
     """Build ProviderConfig for a managed record."""
     rec = normalize_record(rec, entry)
-    provider_type = str(rec[CONF_PROVIDER_TYPE])
-    credentials = dict(rec.get(CONF_PROVIDER_CONFIG) or {})
-    return ProviderConfig(provider_type=provider_type, credentials=credentials)
+    return ProviderConfig(
+        provider_type=str(rec[CONF_PROVIDER_TYPE]),
+        credentials=dict(rec.get(CONF_PROVIDER_CONFIG) or {}),
+    )
 
 
 def zone_id_for_record(rec: dict[str, Any], entry: ConfigEntry) -> str:
@@ -66,7 +59,7 @@ def zone_id_for_record(rec: dict[str, Any], entry: ConfigEntry) -> str:
     cfg = rec.get(CONF_PROVIDER_CONFIG) or {}
     if cfg.get(CONF_ZONE_ID):
         return str(cfg[CONF_ZONE_ID])
-    if entry.data.get(CONF_ZONE_ID) and rec.get(CONF_PROVIDER_TYPE, entry.data.get(CONF_PROVIDER_TYPE)) == PROVIDER_CLOUDFLARE:
+    if entry.data.get(CONF_ZONE_ID) and rec.get(CONF_PROVIDER_TYPE) == PROVIDER_CLOUDFLARE:
         return str(entry.data[CONF_ZONE_ID])
     name = str(rec.get(CONF_RECORD_NAME) or "")
     if name:
@@ -84,12 +77,18 @@ def provider_record_id(rec: dict[str, Any]) -> str:
     return record_uid(rec)
 
 
-def record_display_label(rec: dict[str, Any]) -> str:
+def record_display_label(rec: dict[str, Any], entry: ConfigEntry | None = None) -> str:
     """Label for UI pickers."""
     name = str(rec.get(CONF_RECORD_NAME) or rec.get(CONF_RECORD_ID) or record_uid(rec))
-    provider = str(rec.get(CONF_PROVIDER_TYPE, ""))
     rtype = str(rec.get(CONF_RECORD_TYPE, "A"))
-    if provider:
-        provider_label = PROVIDER_LABELS.get(provider, provider)
+    provider = str(rec.get(CONF_PROVIDER_TYPE, ""))
+    provider_label = PROVIDER_LABELS.get(provider, provider) if provider else ""
+
+    if entry is not None and rec.get(CONF_PROVIDER_ID):
+        prov = find_provider(entry, str(rec[CONF_PROVIDER_ID]))
+        if prov and prov.get("name"):
+            provider_label = str(prov["name"])
+
+    if provider_label:
         return f"{name} ({rtype}) — {provider_label}"
     return f"{name} ({rtype})"

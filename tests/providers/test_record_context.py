@@ -2,7 +2,11 @@ from __future__ import annotations
 
 import pytest
 
-from custom_components.dns_manager.const import CONF_PROVIDER_TYPE, CONF_RECORD_ID, CONF_RECORD_NAME
+from custom_components.dns_manager.const import (
+    CONF_PROVIDER_CONFIG,
+    CONF_PROVIDER_TYPE,
+    CONF_RECORD_ID,
+)
 from custom_components.dns_manager.providers.record_context import (
     normalize_record,
     record_uid,
@@ -29,6 +33,6 @@ def test_normalize_legacy_cloudflare_record():
     )
     rec = normalize_record(entry.options["records"][0], entry)
     assert rec[CONF_PROVIDER_TYPE] == "cloudflare"
-    assert rec["provider_config"]["zone_id"] == "z1"
+    assert rec[CONF_PROVIDER_CONFIG]["zone_id"] == "z1"
     assert record_uid(rec) == "r1"
     assert zone_id_for_record(rec, entry) == "z1"

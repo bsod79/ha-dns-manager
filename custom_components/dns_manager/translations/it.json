@@ -3,7 +3,7 @@
     "step": {
       "user": {
         "title": "DNS Manager",
-        "description": "Crea un'istanza DNS Manager. Aggiungi i record gestiti (ognuno con il proprio provider) dalle Opzioni dopo la configurazione.",
+        "description": "Crea un'istanza, poi configura provider e record dalle Opzioni.",
         "data": {
           "instance_name": "Nome istanza"
         }
@@ -12,7 +12,7 @@
     "error": {
       "cannot_connect": "Impossibile connettersi",
       "invalid_auth": "Autenticazione non valida",
-      "invalid_ip": "Indirizzo IP non valido",
+      "invalid_ip": "IP o URL non valido",
       "record_already_managed": "Il record è già gestito",
       "unknown": "Errore imprevisto"
     }
@@ -23,87 +23,51 @@
         "title": "DNS Manager",
         "menu_options": {
           "general": "Impostazioni generali",
-          "add_record_provider": "Aggiungi record gestito",
+          "providers_menu": "Gestisci provider",
+          "add_record_select_provider": "Aggiungi record gestito",
           "edit_record_select": "Modifica record gestito",
           "remove_record_select": "Rimuovi record gestito"
         }
       },
-      "general": {
-        "title": "Impostazioni generali",
-        "data": {
-          "scan_interval": "Intervallo di polling (secondi)",
-          "ip_detection_url": "URL rilevamento IP pubblico",
-          "auto_sync": "Aggiorna automaticamente il DNS se non allineato"
-        },
-        "data_description": {
-          "scan_interval": "Ogni quanto controllare IP pubblico e stato dei record (predefinito 300 s).",
-          "auto_sync": "Se attivo, ogni polling aggiorna anche i record non allineati. Se disattivo, usa i pulsanti Aggiorna o i servizi."
+      "providers_menu": {
+        "title": "Provider",
+        "menu_options": {
+          "add_provider_type": "Aggiungi provider",
+          "remove_provider_select": "Rimuovi provider"
         }
       },
-      "add_record_provider": {
-        "title": "Scegli provider DNS",
+      "add_record_select_provider": {
+        "title": "Aggiungi record gestito",
+        "description": "Scegli un provider già salvato. Non serve reinserire le credenziali.",
         "data": {
-          "provider_type": "Provider"
+          "provider_id": "Provider"
         }
       },
-      "add_record_duckdns": {
-        "title": "DuckDNS",
+      "add_record_ip_mode": {
+        "title": "Strategia IP",
         "data": {
-          "subdomain": "Sottodominio (senza .duckdns.org)",
-          "token": "Token"
+          "ip_mode": "Come ottenere l'IP atteso"
         }
       },
-      "add_record_noip": {
-        "title": "No-IP",
+      "add_record_ip_details": {
+        "title": "Dettagli IP",
         "data": {
-          "hostname": "Hostname (FQDN)",
-          "username": "Username",
-          "password": "Password"
-        }
-      },
-      "add_record_dyndns": {
-        "title": "DynDNS",
-        "data": {
-          "hostname": "Hostname (FQDN)",
-          "username": "Username",
-          "password": "Password"
-        }
-      },
-      "add_record_dynv6": {
-        "title": "dynv6",
-        "data": {
-          "hostname": "Hostname (FQDN)",
-          "token": "Token"
-        }
-      },
-      "add_record_strategy": {
-        "title": "Impostazioni record",
-        "data": {
-          "ip_mode": "Strategia IP",
           "static_ip": "IPv4 statico",
           "ip_url": "URL rilevamento IP"
-        },
-        "data_description": {
-          "ip_mode": "Auto usa l'IP pubblico dell'istanza. URL recupera un IPv4 da un endpoint. Statico usa un indirizzo fisso.",
-          "ip_url": "Usato se la strategia è From URL. Accetta testo semplice o JSON con campo ip."
         }
       },
-      "edit_record_strategy": {
-        "title": "Impostazioni record",
+      "edit_record_ip_mode": {
+        "title": "Strategia IP",
         "data": {
-          "ip_mode": "Strategia IP",
-          "static_ip": "IPv4 statico",
-          "ip_url": "URL rilevamento IP",
+          "ip_mode": "Come ottenere l'IP atteso",
           "enabled": "Abilitato"
-        },
-        "data_description": {
-          "ip_mode": "Auto usa l'IP pubblico dell'istanza. URL recupera un IPv4 da un endpoint. Statico usa un indirizzo fisso.",
-          "ip_url": "Usato se la strategia è From URL. Accetta testo semplice o JSON con campo ip."
         }
       }
     },
     "abort": {
-      "no_managed_records": "Nessun record gestito al momento."
+      "no_managed_records": "Nessun record gestito al momento.",
+      "no_providers": "Aggiungi prima un provider (Opzioni → Gestisci provider).",
+      "provider_in_use": "Impossibile rimuovere: ci sono ancora record collegati a questo provider."
     }
   },
   "entity": {

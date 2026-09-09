@@ -23,6 +23,14 @@ PROVIDER_LABELS: dict[str, str] = {
 
 ZONE_BASED_PROVIDERS: frozenset[str] = frozenset({PROVIDER_CLOUDFLARE})
 
+CONF_SCAN_INTERVAL = "scan_interval"
+CONF_IP_DETECTION_URL = "ip_detection_url"
+CONF_AUTO_SYNC = "auto_sync"
+CONF_PROVIDERS = "providers"
+CONF_RECORDS = "records"
+
+CONF_PROVIDER_ID = "provider_id"
+CONF_PROVIDER_NAME = "name"
 CONF_PROVIDER_TYPE = "provider_type"
 CONF_PROVIDER_CONFIG = "provider_config"
 CONF_CREDENTIALS = "credentials"
@@ -43,11 +51,6 @@ CONF_TOKEN = "token"
 CONF_HOSTNAME = "hostname"
 CONF_USERNAME = "username"
 CONF_PASSWORD = "password"
-
-CONF_SCAN_INTERVAL = "scan_interval"
-CONF_IP_DETECTION_URL = "ip_detection_url"
-CONF_AUTO_SYNC = "auto_sync"
-CONF_RECORDS = "records"
 
 CONF_RECORD_UID = "record_uid"
 CONF_RECORD_ID = "record_id"

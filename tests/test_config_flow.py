@@ -9,10 +9,10 @@ from homeassistant.core import HomeAssistant
 
 from custom_components.dns_manager.const import (
     CONF_IP_DETECTION_URL,
+    CONF_PROVIDER_ID,
     CONF_PROVIDER_TYPE,
+    CONF_PROVIDERS,
     CONF_RECORDS,
-    CONF_RECORD_TYPE,
-    CONF_RECORD_UID,
     CONF_SCAN_INTERVAL,
     CONF_SUBDOMAIN,
     CONF_TOKEN,
@@ -36,18 +36,20 @@ async def test_config_flow_creates_entry_without_records(hass: HomeAssistant) ->
     assert result["title"] == "My DNS"
     assert result["data"] == {}
     assert result["options"][CONF_RECORDS] == []
+    assert result["options"][CONF_PROVIDERS] == []
 
 
 @pytest.mark.asyncio
-async def test_options_flow_add_duckdns_record(hass: HomeAssistant) -> None:
+async def test_options_flow_add_provider_then_record(hass: HomeAssistant) -> None:
     entry = config_entries.ConfigEntry(
-        version=2,
+        version=3,
         domain="dns_manager",
         title="My DNS",
         data={},
         options={
             CONF_SCAN_INTERVAL: 300,
             CONF_IP_DETECTION_URL: "https://api.ipify.org?format=json",
+            CONF_PROVIDERS: [],
             CONF_RECORDS: [],
         },
         source=config_entries.SOURCE_USER,
@@ -64,27 +66,49 @@ async def test_options_flow_add_duckdns_record(hass: HomeAssistant) -> None:
             assert result["type"] == "menu"
 
             result = await hass.config_entries.options.async_configure(
-                result["flow_id"], {"next_step_id": "add_record_provider"}
+                result["flow_id"], {"next_step_id": "providers_menu"}
             )
-            assert result["step_id"] == "add_record_provider"
+            assert result["type"] == "menu"
 
             result = await hass.config_entries.options.async_configure(
-                result["flow_id"], {CONF_PROVIDER_TYPE: PROVIDER_DUCKDNS}
+                result["flow_id"], {"next_step_id": "add_provider_type"}
             )
-            assert result["step_id"] == "add_record_duckdns"
+            assert result["step_id"] == "add_provider_type"
 
             result = await hass.config_entries.options.async_configure(
-                result["flow_id"], {CONF_SUBDOMAIN: "myhost", CONF_TOKEN: "tok"},
+                result["flow_id"],
+                {"provider": {CONF_PROVIDER_TYPE: PROVIDER_DUCKDNS, "name": "Duck home"}},
             )
-            assert result["step_id"] == "add_record_strategy"
+            assert result["step_id"] == "add_provider_duckdns"
 
             result = await hass.config_entries.options.async_configure(
-                result["flow_id"], {"ip_mode": "auto"}
+                result["flow_id"],
+                {"duckdns": {CONF_SUBDOMAIN: "myhost", CONF_TOKEN: "tok"}},
             )
             assert result["type"] == "create_entry"
-            assert len(result["data"][CONF_RECORDS]) == 1
-            rec = result["data"][CONF_RECORDS][0]
-            assert rec[CONF_PROVIDER_TYPE] == PROVIDER_DUCKDNS
-            assert rec.get(CONF_RECORD_UID)
-            assert rec.get(CONF_RECORD_TYPE) == "A"
-            assert rec["name"] == "myhost.duckdns.org"
+            assert len(result["data"][CONF_PROVIDERS]) == 1
+            provider_id = result["data"][CONF_PROVIDERS][0][CONF_PROVIDER_ID]
+
+    # Reload entry options from create_entry isn't automatic in unit test — update entry
+    hass.config_entries.async_update_entry(entry, options=result["data"])
+
+    with patch("custom_components.dns_manager.config_flow.get_provider", return_value=provider):
+        result = await hass.config_entries.options.async_init(entry.entry_id)
+        result = await hass.config_entries.options.async_configure(
+            result["flow_id"], {"next_step_id": "add_record_select_provider"}
+        )
+        assert result["step_id"] == "add_record_select_provider"
+
+        result = await hass.config_entries.options.async_configure(
+            result["flow_id"], {CONF_PROVIDER_ID: provider_id}
+        )
+        assert result["step_id"] == "add_record_ip_mode"
+
+        result = await hass.config_entries.options.async_configure(
+            result["flow_id"], {"ip_mode": "auto"}
+        )
+        assert result["type"] == "create_entry"
+        assert len(result["data"][CONF_RECORDS]) == 1
+        rec = result["data"][CONF_RECORDS][0]
+        assert rec[CONF_PROVIDER_ID] == provider_id
+        assert rec["name"] == "myhost.duckdns.org"
