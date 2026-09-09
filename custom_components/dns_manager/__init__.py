@@ -2,22 +2,61 @@
 
 from __future__ import annotations
 
+import logging
 from dataclasses import dataclass
 
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.core import HomeAssistant
 
 from .activity_log import DnsManagerActivityLog
-from .const import CONF_AUTO_SYNC, CONF_PROVIDERS, CONF_RECORDS, CONF_SCAN_INTERVAL, DOMAIN, PLATFORMS
+from .const import (
+    CONF_AUTO_SYNC,
+    CONF_IP_DETECTION_URL,
+    CONF_PROVIDERS,
+    CONF_RECORDS,
+    CONF_SCAN_INTERVAL,
+    DEFAULT_AUTO_SYNC,
+    DEFAULT_IP_DETECTION_URL,
+    DEFAULT_SCAN_INTERVAL,
+    DOMAIN,
+    PLATFORMS,
+)
 from .coordinator import DnsManagerCoordinator
 from .options_model import build_options_payload, migrate_options
 from .services import async_register_services, async_unregister_services
+
+_LOGGER = logging.getLogger(__name__)
 
 
 @dataclass(slots=True)
 class RuntimeData:
     coordinator: DnsManagerCoordinator
     activity_log: DnsManagerActivityLog
+
+
+async def async_migrate_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
+    """Migrate config entry to the current version."""
+    _LOGGER.debug("Migrating %s from version %s", entry.title, entry.version)
+
+    if entry.version > 3:
+        # Future/unknown version — refuse rather than corrupt data.
+        return False
+
+    if entry.version < 3:
+        providers, records, _ = migrate_options(entry)
+        new_options = build_options_payload(
+            scan_interval=int(entry.options.get(CONF_SCAN_INTERVAL, DEFAULT_SCAN_INTERVAL)),
+            ip_detection_url=str(
+                entry.options.get(CONF_IP_DETECTION_URL, DEFAULT_IP_DETECTION_URL)
+            ),
+            auto_sync=bool(entry.options.get(CONF_AUTO_SYNC, DEFAULT_AUTO_SYNC)),
+            providers=providers,
+            records=records,
+        )
+        hass.config_entries.async_update_entry(entry, options=new_options, version=3)
+        _LOGGER.info("Migrated %s to config entry version 3 (saved providers model)", entry.title)
+
+    return True
 
 
 async def _async_reload_entry(hass: HomeAssistant, entry: ConfigEntry) -> None:
@@ -30,11 +69,11 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     providers, records, migrated = migrate_options(entry)
     if migrated:
         new_options = build_options_payload(
-            scan_interval=int(entry.options.get(CONF_SCAN_INTERVAL, 300)),
+            scan_interval=int(entry.options.get(CONF_SCAN_INTERVAL, DEFAULT_SCAN_INTERVAL)),
             ip_detection_url=str(
-                entry.options.get("ip_detection_url", "https://api.ipify.org?format=json")
+                entry.options.get(CONF_IP_DETECTION_URL, DEFAULT_IP_DETECTION_URL)
             ),
-            auto_sync=bool(entry.options.get(CONF_AUTO_SYNC, False)),
+            auto_sync=bool(entry.options.get(CONF_AUTO_SYNC, DEFAULT_AUTO_SYNC)),
             providers=providers,
             records=records,
         )
