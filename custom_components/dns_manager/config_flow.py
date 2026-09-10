@@ -74,9 +74,22 @@ def _validate_ipv4(value: str) -> str:
     return str(ipaddress.IPv4Address(value))
 
 
-def _try_section(schema: vol.Schema, *, collapsed: bool = False):
-    """Use HA section helper when available."""
+def _section(schema: vol.Schema, *, collapsed: bool = False):
+    """HA expandable section for logical grouping."""
     return section(schema, {"collapsed": collapsed})
+
+
+def _sectioned(key: str, fields: dict[Any, Any]) -> vol.Schema:
+    """Wrap fields in a single named section."""
+    return vol.Schema({vol.Required(key): _section(vol.Schema(fields), collapsed=False)})
+
+
+def _from_section(user_input: dict[str, Any], key: str) -> dict[str, Any]:
+    """Read nested section payload or flat input (compat)."""
+    nested = user_input.get(key)
+    if isinstance(nested, dict):
+        return nested
+    return user_input
 
 
 class DnsManagerConfigFlow(config_entries.ConfigFlow, domain="dns_manager"):
@@ -86,20 +99,17 @@ class DnsManagerConfigFlow(config_entries.ConfigFlow, domain="dns_manager"):
 
     async def async_step_user(self, user_input: dict[str, Any] | None = None) -> FlowResult:
         if user_input is not None:
-            title = str(user_input.get("instance_name", "DNS Manager")).strip() or "DNS Manager"
+            data = _from_section(user_input, "setup")
+            title = str(data.get("instance_name", "DNS Manager")).strip() or "DNS Manager"
             return self.async_create_entry(title=title, data={}, options=default_options())
 
-        schema = vol.Schema(
-            {
-                vol.Required("setup"): _try_section(
-                    vol.Schema({vol.Optional("instance_name", default="DNS Manager"): str}),
-                    collapsed=False,
-                )
-            }
+        return self.async_show_form(
+            step_id="user",
+            data_schema=_sectioned(
+                "setup",
+                {vol.Optional("instance_name", default="DNS Manager"): str},
+            ),
         )
-        # Flatten if section nesting is awkward for first step — keep simple too
-        schema = vol.Schema({vol.Optional("instance_name", default="DNS Manager"): str})
-        return self.async_show_form(step_id="user", data_schema=schema)
 
     @staticmethod
     @config_entries.callback
@@ -120,7 +130,6 @@ class DnsManagerOptionsFlow(config_entries.OptionsFlow):
         # Add provider wizard
         self._adding_provider_type: str | None = None
         self._adding_provider_config: dict[str, Any] = {}
-        self._adding_provider_name: str = ""
         self._cf_client = None
         self._zones: list[dict] = []
 
@@ -185,27 +194,23 @@ class DnsManagerOptionsFlow(config_entries.OptionsFlow):
 
     async def async_step_general(self, user_input: dict[str, Any] | None = None) -> FlowResult:
         if user_input is not None:
-            polling = user_input.get("polling") or user_input
+            polling = _from_section(user_input, "polling")
             self._scan_interval = int(polling[CONF_SCAN_INTERVAL])
             self._ip_url = str(polling[CONF_IP_DETECTION_URL])
             self._auto_sync = bool(polling.get(CONF_AUTO_SYNC, DEFAULT_AUTO_SYNC))
             return self._save()
 
-        schema = vol.Schema(
-            {
-                vol.Required("polling"): _try_section(
-                    vol.Schema(
-                        {
-                            vol.Required(CONF_SCAN_INTERVAL, default=self._scan_interval): vol.Coerce(int),
-                            vol.Required(CONF_IP_DETECTION_URL, default=self._ip_url): str,
-                            vol.Optional(CONF_AUTO_SYNC, default=self._auto_sync): bool,
-                        }
-                    ),
-                    collapsed=False,
-                )
-            }
+        return self.async_show_form(
+            step_id="general",
+            data_schema=_sectioned(
+                "polling",
+                {
+                    vol.Required(CONF_SCAN_INTERVAL, default=self._scan_interval): vol.Coerce(int),
+                    vol.Required(CONF_IP_DETECTION_URL, default=self._ip_url): str,
+                    vol.Optional(CONF_AUTO_SYNC, default=self._auto_sync): bool,
+                },
+            ),
         )
-        return self.async_show_form(step_id="general", data_schema=schema)
 
     # --- Providers ---
 
@@ -217,9 +222,8 @@ class DnsManagerOptionsFlow(config_entries.OptionsFlow):
 
     async def async_step_add_provider_type(self, user_input: dict[str, Any] | None = None) -> FlowResult:
         if user_input is not None:
-            nested = user_input.get("provider") if isinstance(user_input.get("provider"), dict) else user_input
+            nested = _from_section(user_input, "provider")
             self._adding_provider_type = str(nested[CONF_PROVIDER_TYPE])
-            self._adding_provider_name = str(nested.get(CONF_PROVIDER_NAME, "")).strip()
             if self._adding_provider_type == PROVIDER_CLOUDFLARE:
                 return await self.async_step_add_provider_cloudflare_credentials()
             if self._adding_provider_type == PROVIDER_DUCKDNS:
@@ -228,27 +232,20 @@ class DnsManagerOptionsFlow(config_entries.OptionsFlow):
                 return await self.async_step_add_provider_hostname_auth()
             return await self.async_step_add_provider_dynv6()
 
-        schema = vol.Schema(
-            {
-                vol.Required("provider"): _try_section(
-                    vol.Schema(
-                        {
-                            vol.Required(CONF_PROVIDER_TYPE): vol.In(PROVIDER_LABELS),
-                            vol.Optional(CONF_PROVIDER_NAME, default=""): str,
-                        }
-                    ),
-                    collapsed=False,
-                )
-            }
+        return self.async_show_form(
+            step_id="add_provider_type",
+            data_schema=_sectioned(
+                "provider",
+                {vol.Required(CONF_PROVIDER_TYPE): vol.In(PROVIDER_LABELS)},
+            ),
         )
-        return self.async_show_form(step_id="add_provider_type", data_schema=schema)
     async def async_step_add_provider_cloudflare_credentials(
         self, user_input: dict[str, Any] | None = None
     ) -> FlowResult:
         errors: dict[str, str] = {}
         if user_input is not None:
             try:
-                auth = user_input.get("auth") if isinstance(user_input.get("auth"), dict) else user_input
+                auth = _from_section(user_input, "auth")
                 auth_mode = auth[CONF_AUTH_MODE]
                 credentials: dict[str, Any] = {CONF_AUTH_MODE: auth_mode}
                 if auth_mode == AUTH_MODE_TOKEN:
@@ -272,7 +269,7 @@ class DnsManagerOptionsFlow(config_entries.OptionsFlow):
         auth_modes = {AUTH_MODE_TOKEN: "API Token", AUTH_MODE_GLOBAL_KEY: "Global API Key"}
         auth_mode = AUTH_MODE_TOKEN
         if user_input:
-            auth = user_input.get("auth") if isinstance(user_input.get("auth"), dict) else user_input
+            auth = _from_section(user_input, "auth")
             auth_mode = auth.get(CONF_AUTH_MODE, AUTH_MODE_TOKEN)
 
         fields: dict[Any, Any] = {vol.Required(CONF_AUTH_MODE, default=auth_mode): vol.In(auth_modes)}
@@ -282,10 +279,9 @@ class DnsManagerOptionsFlow(config_entries.OptionsFlow):
             fields[vol.Required(CONF_API_EMAIL)] = str
             fields[vol.Required(CONF_API_KEY)] = str
 
-        schema = vol.Schema({vol.Required("auth"): _try_section(vol.Schema(fields), collapsed=False)})
         return self.async_show_form(
             step_id="add_provider_cloudflare_credentials",
-            data_schema=schema,
+            data_schema=_sectioned("auth", fields),
             errors=errors,
         )
 
@@ -294,7 +290,7 @@ class DnsManagerOptionsFlow(config_entries.OptionsFlow):
     ) -> FlowResult:
         errors: dict[str, str] = {}
         if user_input is not None:
-            zone = user_input.get("zone") if isinstance(user_input.get("zone"), dict) else user_input
+            zone = _from_section(user_input, "zone")
             zone_id = str(zone[CONF_ZONE_ID])
             zone_name = next((z["name"] for z in self._zones if z["id"] == zone_id), zone_id)
             self._adding_provider_config = {
@@ -302,11 +298,10 @@ class DnsManagerOptionsFlow(config_entries.OptionsFlow):
                 CONF_ZONE_ID: zone_id,
                 CONF_ZONE_NAME: zone_name,
             }
-            name = self._adding_provider_name or f"Cloudflare — {zone_name}"
             self._providers.append(
                 {
                     CONF_PROVIDER_ID: str(uuid.uuid4()),
-                    CONF_PROVIDER_NAME: name,
+                    CONF_PROVIDER_NAME: f"Cloudflare — {zone_name}",
                     CONF_PROVIDER_TYPE: PROVIDER_CLOUDFLARE,
                     CONF_PROVIDER_CONFIG: dict(self._adding_provider_config),
                 }
@@ -319,21 +314,17 @@ class DnsManagerOptionsFlow(config_entries.OptionsFlow):
             errors["base"] = "cannot_connect"
 
         zones_map = {z["id"]: z["name"] for z in self._zones}
-        schema = vol.Schema(
-            {
-                vol.Required("zone"): _try_section(
-                    vol.Schema({vol.Required(CONF_ZONE_ID): vol.In(zones_map)}),
-                    collapsed=False,
-                )
-            }
+        return self.async_show_form(
+            step_id="add_provider_cloudflare_zone",
+            data_schema=_sectioned("zone", {vol.Required(CONF_ZONE_ID): vol.In(zones_map)}),
+            errors=errors,
         )
-        return self.async_show_form(step_id="add_provider_cloudflare_zone", data_schema=schema, errors=errors)
 
     async def async_step_add_provider_duckdns(self, user_input: dict[str, Any] | None = None) -> FlowResult:
         errors: dict[str, str] = {}
         if user_input is not None:
             try:
-                data = user_input.get("duckdns") if isinstance(user_input.get("duckdns"), dict) else user_input
+                data = _from_section(user_input, "duckdns")
                 subdomain = str(data[CONF_SUBDOMAIN]).strip().lower()
                 token = str(data[CONF_TOKEN]).strip()
                 provider = DuckDNSProvider(
@@ -343,11 +334,10 @@ class DnsManagerOptionsFlow(config_entries.OptionsFlow):
                     )
                 )
                 await provider.validate_credentials()
-                name = self._adding_provider_name or f"DuckDNS — {subdomain}"
                 self._providers.append(
                     {
                         CONF_PROVIDER_ID: str(uuid.uuid4()),
-                        CONF_PROVIDER_NAME: name,
+                        CONF_PROVIDER_NAME: f"DuckDNS — {subdomain}",
                         CONF_PROVIDER_TYPE: PROVIDER_DUCKDNS,
                         CONF_PROVIDER_CONFIG: {CONF_SUBDOMAIN: subdomain, CONF_TOKEN: token},
                     }
@@ -360,20 +350,17 @@ class DnsManagerOptionsFlow(config_entries.OptionsFlow):
             except Exception:  # noqa: BLE001
                 errors["base"] = "unknown"
 
-        schema = vol.Schema(
-            {
-                vol.Required("duckdns"): _try_section(
-                    vol.Schema(
-                        {
-                            vol.Required(CONF_SUBDOMAIN): str,
-                            vol.Required(CONF_TOKEN): str,
-                        }
-                    ),
-                    collapsed=False,
-                )
-            }
+        return self.async_show_form(
+            step_id="add_provider_duckdns",
+            data_schema=_sectioned(
+                "duckdns",
+                {
+                    vol.Required(CONF_SUBDOMAIN): str,
+                    vol.Required(CONF_TOKEN): str,
+                },
+            ),
+            errors=errors,
         )
-        return self.async_show_form(step_id="add_provider_duckdns", data_schema=schema, errors=errors)
 
     async def async_step_add_provider_hostname_auth(
         self, user_input: dict[str, Any] | None = None
@@ -382,7 +369,7 @@ class DnsManagerOptionsFlow(config_entries.OptionsFlow):
         provider_type = str(self._adding_provider_type)
         if user_input is not None:
             try:
-                data = user_input.get("account") if isinstance(user_input.get("account"), dict) else user_input
+                data = _from_section(user_input, "account")
                 hostname = str(data[CONF_HOSTNAME]).strip().lower()
                 username = str(data[CONF_USERNAME]).strip()
                 password = str(data[CONF_PASSWORD])
@@ -398,11 +385,10 @@ class DnsManagerOptionsFlow(config_entries.OptionsFlow):
                 )
                 await provider.validate_credentials()
                 label = PROVIDER_LABELS.get(provider_type, provider_type)
-                name = self._adding_provider_name or f"{label} — {hostname}"
                 self._providers.append(
                     {
                         CONF_PROVIDER_ID: str(uuid.uuid4()),
-                        CONF_PROVIDER_NAME: name,
+                        CONF_PROVIDER_NAME: f"{label} — {hostname}",
                         CONF_PROVIDER_TYPE: provider_type,
                         CONF_PROVIDER_CONFIG: {
                             CONF_HOSTNAME: hostname,
@@ -419,27 +405,24 @@ class DnsManagerOptionsFlow(config_entries.OptionsFlow):
             except Exception:  # noqa: BLE001
                 errors["base"] = "unknown"
 
-        schema = vol.Schema(
-            {
-                vol.Required("account"): _try_section(
-                    vol.Schema(
-                        {
-                            vol.Required(CONF_HOSTNAME): str,
-                            vol.Required(CONF_USERNAME): str,
-                            vol.Required(CONF_PASSWORD): str,
-                        }
-                    ),
-                    collapsed=False,
-                )
-            }
+        return self.async_show_form(
+            step_id="add_provider_hostname_auth",
+            data_schema=_sectioned(
+                "account",
+                {
+                    vol.Required(CONF_HOSTNAME): str,
+                    vol.Required(CONF_USERNAME): str,
+                    vol.Required(CONF_PASSWORD): str,
+                },
+            ),
+            errors=errors,
         )
-        return self.async_show_form(step_id="add_provider_hostname_auth", data_schema=schema, errors=errors)
 
     async def async_step_add_provider_dynv6(self, user_input: dict[str, Any] | None = None) -> FlowResult:
         errors: dict[str, str] = {}
         if user_input is not None:
             try:
-                data = user_input.get("dynv6") if isinstance(user_input.get("dynv6"), dict) else user_input
+                data = _from_section(user_input, "dynv6")
                 hostname = str(data[CONF_HOSTNAME]).strip().lower()
                 token = str(data[CONF_TOKEN]).strip()
                 provider = get_provider(
@@ -449,11 +432,10 @@ class DnsManagerOptionsFlow(config_entries.OptionsFlow):
                     )
                 )
                 await provider.validate_credentials()
-                name = self._adding_provider_name or f"dynv6 — {hostname}"
                 self._providers.append(
                     {
                         CONF_PROVIDER_ID: str(uuid.uuid4()),
-                        CONF_PROVIDER_NAME: name,
+                        CONF_PROVIDER_NAME: f"dynv6 — {hostname}",
                         CONF_PROVIDER_TYPE: PROVIDER_DYNV6,
                         CONF_PROVIDER_CONFIG: {CONF_HOSTNAME: hostname, CONF_TOKEN: token},
                     }
@@ -466,34 +448,36 @@ class DnsManagerOptionsFlow(config_entries.OptionsFlow):
             except Exception:  # noqa: BLE001
                 errors["base"] = "unknown"
 
-        schema = vol.Schema(
-            {
-                vol.Required("dynv6"): _try_section(
-                    vol.Schema(
-                        {
-                            vol.Required(CONF_HOSTNAME): str,
-                            vol.Required(CONF_TOKEN): str,
-                        }
-                    ),
-                    collapsed=False,
-                )
-            }
+        return self.async_show_form(
+            step_id="add_provider_dynv6",
+            data_schema=_sectioned(
+                "dynv6",
+                {
+                    vol.Required(CONF_HOSTNAME): str,
+                    vol.Required(CONF_TOKEN): str,
+                },
+            ),
+            errors=errors,
         )
-        return self.async_show_form(step_id="add_provider_dynv6", data_schema=schema, errors=errors)
+
+    def _provider_select_schema(self) -> vol.Schema:
+        return _sectioned("selection", {vol.Required(CONF_PROVIDER_ID): vol.In(self._provider_map())})
 
     async def async_step_remove_provider_select(self, user_input: dict[str, Any] | None = None) -> FlowResult:
         if not self._providers:
             return self.async_abort(reason="no_providers")
 
         if user_input is not None:
-            pid = str(user_input[CONF_PROVIDER_ID])
+            pid = str(_from_section(user_input, "selection")[CONF_PROVIDER_ID])
             if any(str(r.get(CONF_PROVIDER_ID)) == pid for r in self._records):
                 return self.async_abort(reason="provider_in_use")
             self._providers = [p for p in self._providers if provider_uid(p) != pid]
             return self._save()
 
-        schema = vol.Schema({vol.Required(CONF_PROVIDER_ID): vol.In(self._provider_map())})
-        return self.async_show_form(step_id="remove_provider_select", data_schema=schema)
+        return self.async_show_form(
+            step_id="remove_provider_select",
+            data_schema=self._provider_select_schema(),
+        )
 
     # --- Records ---
 
@@ -504,7 +488,7 @@ class DnsManagerOptionsFlow(config_entries.OptionsFlow):
             return self.async_abort(reason="no_providers")
 
         if user_input is not None:
-            self._selected_provider_id = str(user_input[CONF_PROVIDER_ID])
+            self._selected_provider_id = str(_from_section(user_input, "selection")[CONF_PROVIDER_ID])
             prov = find_provider_in_list(self._providers, self._selected_provider_id)
             if prov is None:
                 return self.async_abort(reason="no_providers")
@@ -517,7 +501,7 @@ class DnsManagerOptionsFlow(config_entries.OptionsFlow):
             if self._record_already_managed(hostname, self._selected_provider_id):
                 return self.async_show_form(
                     step_id="add_record_select_provider",
-                    data_schema=vol.Schema({vol.Required(CONF_PROVIDER_ID): vol.In(self._provider_map())}),
+                    data_schema=self._provider_select_schema(),
                     errors={"base": "record_already_managed"},
                 )
             self._adding_record_id = hostname
@@ -525,8 +509,10 @@ class DnsManagerOptionsFlow(config_entries.OptionsFlow):
             self._adding_record_type = "A"
             return await self.async_step_add_record_ip_mode()
 
-        schema = vol.Schema({vol.Required(CONF_PROVIDER_ID): vol.In(self._provider_map())})
-        return self.async_show_form(step_id="add_record_select_provider", data_schema=schema)
+        return self.async_show_form(
+            step_id="add_record_select_provider",
+            data_schema=self._provider_select_schema(),
+        )
 
     async def async_step_add_record_cloudflare_select(
         self, user_input: dict[str, Any] | None = None
@@ -542,7 +528,7 @@ class DnsManagerOptionsFlow(config_entries.OptionsFlow):
         )
 
         if user_input is not None:
-            cf_record_id = str(user_input[CONF_RECORD_ID])
+            cf_record_id = str(_from_section(user_input, "record")[CONF_RECORD_ID])
             record = next((r for r in self._cf_records if r.record_id == cf_record_id), None)
             name = record.name if record else cf_record_id
             if self._record_already_managed(name, str(self._selected_provider_id)):
@@ -559,27 +545,36 @@ class DnsManagerOptionsFlow(config_entries.OptionsFlow):
             errors["base"] = "cannot_connect"
 
         rec_map = {r.record_id: f"{r.name} ({r.record_type})" for r in self._cf_records}
-        schema = vol.Schema({vol.Required(CONF_RECORD_ID): vol.In(rec_map)})
-        return self.async_show_form(step_id="add_record_cloudflare_select", data_schema=schema, errors=errors)
+        return self.async_show_form(
+            step_id="add_record_cloudflare_select",
+            data_schema=_sectioned("record", {vol.Required(CONF_RECORD_ID): vol.In(rec_map)}),
+            errors=errors,
+        )
 
     async def async_step_add_record_ip_mode(self, user_input: dict[str, Any] | None = None) -> FlowResult:
         if user_input is not None:
-            self._ip_mode_choice = str(user_input[CONF_IP_MODE])
+            self._ip_mode_choice = str(_from_section(user_input, "strategy")[CONF_IP_MODE])
             if self._ip_mode_choice == IP_MODE_AUTO:
                 return self._finish_add_record(IP_MODE_AUTO, None, None)
             return await self.async_step_add_record_ip_details()
 
-        schema = vol.Schema({vol.Required(CONF_IP_MODE, default=IP_MODE_AUTO): vol.In(IP_MODE_LABELS)})
-        return self.async_show_form(step_id="add_record_ip_mode", data_schema=schema)
+        return self.async_show_form(
+            step_id="add_record_ip_mode",
+            data_schema=_sectioned(
+                "strategy",
+                {vol.Required(CONF_IP_MODE, default=IP_MODE_AUTO): vol.In(IP_MODE_LABELS)},
+            ),
+        )
 
     async def async_step_add_record_ip_details(self, user_input: dict[str, Any] | None = None) -> FlowResult:
         errors: dict[str, str] = {}
         if user_input is not None:
             try:
+                data = _from_section(user_input, "details")
                 if self._ip_mode_choice == IP_MODE_STATIC:
-                    static_ip = _validate_ipv4(str(user_input[CONF_STATIC_IP]).strip())
+                    static_ip = _validate_ipv4(str(data[CONF_STATIC_IP]).strip())
                     return self._finish_add_record(IP_MODE_STATIC, static_ip, None)
-                ip_url = str(user_input[CONF_IP_URL]).strip()
+                ip_url = str(data[CONF_IP_URL]).strip()
                 if not ip_url.startswith(("http://", "https://")):
                     raise ValueError("invalid_url")
                 return self._finish_add_record(IP_MODE_URL, None, ip_url)
@@ -587,10 +582,14 @@ class DnsManagerOptionsFlow(config_entries.OptionsFlow):
                 errors["base"] = "invalid_ip"
 
         if self._ip_mode_choice == IP_MODE_STATIC:
-            schema = vol.Schema({vol.Required(CONF_STATIC_IP): str})
+            fields: dict[Any, Any] = {vol.Required(CONF_STATIC_IP): str}
         else:
-            schema = vol.Schema({vol.Required(CONF_IP_URL): str})
-        return self.async_show_form(step_id="add_record_ip_details", data_schema=schema, errors=errors)
+            fields = {vol.Required(CONF_IP_URL): str}
+        return self.async_show_form(
+            step_id="add_record_ip_details",
+            data_schema=_sectioned("details", fields),
+            errors=errors,
+        )
 
     def _finish_add_record(
         self,
@@ -618,7 +617,7 @@ class DnsManagerOptionsFlow(config_entries.OptionsFlow):
             return self.async_abort(reason="no_managed_records")
 
         if user_input is not None:
-            self._editing_record_uid = str(user_input[CONF_RECORD_UID])
+            self._editing_record_uid = str(_from_section(user_input, "selection")[CONF_RECORD_UID])
             rec = next((r for r in self._records if record_uid(r) == self._editing_record_uid), None)
             if rec is None:
                 return self.async_abort(reason="no_managed_records")
@@ -630,24 +629,30 @@ class DnsManagerOptionsFlow(config_entries.OptionsFlow):
             record_uid(r): record_display_label(normalize_record(r, self.config_entry), self.config_entry)
             for r in self._records
         }
-        schema = vol.Schema({vol.Required(CONF_RECORD_UID): vol.In(labels)})
-        return self.async_show_form(step_id="edit_record_select", data_schema=schema)
+        return self.async_show_form(
+            step_id="edit_record_select",
+            data_schema=_sectioned("selection", {vol.Required(CONF_RECORD_UID): vol.In(labels)}),
+        )
 
     async def async_step_edit_record_ip_mode(self, user_input: dict[str, Any] | None = None) -> FlowResult:
         if user_input is not None:
-            self._ip_mode_choice = str(user_input[CONF_IP_MODE])
-            self._edit_enabled = bool(user_input.get(CONF_ENABLED, True))
+            data = _from_section(user_input, "strategy")
+            self._ip_mode_choice = str(data[CONF_IP_MODE])
+            self._edit_enabled = bool(data.get(CONF_ENABLED, True))
             if self._ip_mode_choice == IP_MODE_AUTO:
                 return self._finish_edit_record(IP_MODE_AUTO, None, None)
             return await self.async_step_edit_record_ip_details()
 
-        schema = vol.Schema(
-            {
-                vol.Required(CONF_IP_MODE, default=self._ip_mode_choice): vol.In(IP_MODE_LABELS),
-                vol.Optional(CONF_ENABLED, default=self._edit_enabled): bool,
-            }
+        return self.async_show_form(
+            step_id="edit_record_ip_mode",
+            data_schema=_sectioned(
+                "strategy",
+                {
+                    vol.Required(CONF_IP_MODE, default=self._ip_mode_choice): vol.In(IP_MODE_LABELS),
+                    vol.Optional(CONF_ENABLED, default=self._edit_enabled): bool,
+                },
+            ),
         )
-        return self.async_show_form(step_id="edit_record_ip_mode", data_schema=schema)
 
     async def async_step_edit_record_ip_details(self, user_input: dict[str, Any] | None = None) -> FlowResult:
         errors: dict[str, str] = {}
@@ -657,10 +662,11 @@ class DnsManagerOptionsFlow(config_entries.OptionsFlow):
 
         if user_input is not None:
             try:
+                data = _from_section(user_input, "details")
                 if self._ip_mode_choice == IP_MODE_STATIC:
-                    static_ip = _validate_ipv4(str(user_input[CONF_STATIC_IP]).strip())
+                    static_ip = _validate_ipv4(str(data[CONF_STATIC_IP]).strip())
                     return self._finish_edit_record(IP_MODE_STATIC, static_ip, None)
-                ip_url = str(user_input[CONF_IP_URL]).strip()
+                ip_url = str(data[CONF_IP_URL]).strip()
                 if not ip_url.startswith(("http://", "https://")):
                     raise ValueError("invalid_url")
                 return self._finish_edit_record(IP_MODE_URL, None, ip_url)
@@ -668,14 +674,16 @@ class DnsManagerOptionsFlow(config_entries.OptionsFlow):
                 errors["base"] = "invalid_ip"
 
         if self._ip_mode_choice == IP_MODE_STATIC:
-            schema = vol.Schema(
-                {vol.Required(CONF_STATIC_IP, default=str(rec.get(CONF_STATIC_IP) or "")): str}
-            )
+            fields: dict[Any, Any] = {
+                vol.Required(CONF_STATIC_IP, default=str(rec.get(CONF_STATIC_IP) or "")): str
+            }
         else:
-            schema = vol.Schema(
-                {vol.Required(CONF_IP_URL, default=str(rec.get(CONF_IP_URL) or "")): str}
-            )
-        return self.async_show_form(step_id="edit_record_ip_details", data_schema=schema, errors=errors)
+            fields = {vol.Required(CONF_IP_URL, default=str(rec.get(CONF_IP_URL) or "")): str}
+        return self.async_show_form(
+            step_id="edit_record_ip_details",
+            data_schema=_sectioned("details", fields),
+            errors=errors,
+        )
 
     def _finish_edit_record(
         self,
@@ -702,7 +710,7 @@ class DnsManagerOptionsFlow(config_entries.OptionsFlow):
             return self.async_abort(reason="no_managed_records")
 
         if user_input is not None:
-            uid = str(user_input[CONF_RECORD_UID])
+            uid = str(_from_section(user_input, "selection")[CONF_RECORD_UID])
             self._records = [r for r in self._records if record_uid(r) != uid]
             return self._save()
 
@@ -710,5 +718,7 @@ class DnsManagerOptionsFlow(config_entries.OptionsFlow):
             record_uid(r): record_display_label(normalize_record(r, self.config_entry), self.config_entry)
             for r in self._records
         }
-        schema = vol.Schema({vol.Required(CONF_RECORD_UID): vol.In(labels)})
-        return self.async_show_form(step_id="remove_record_select", data_schema=schema)
+        return self.async_show_form(
+            step_id="remove_record_select",
+            data_schema=_sectioned("selection", {vol.Required(CONF_RECORD_UID): vol.In(labels)}),
+        )

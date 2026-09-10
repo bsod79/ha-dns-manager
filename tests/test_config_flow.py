@@ -30,7 +30,7 @@ async def test_config_flow_creates_entry_without_records(hass: HomeAssistant) ->
 
     result = await hass.config_entries.flow.async_configure(
         result["flow_id"],
-        {"instance_name": "My DNS"},
+        {"setup": {"instance_name": "My DNS"}},
     )
     assert result["type"] == "create_entry"
     assert result["title"] == "My DNS"
@@ -77,7 +77,7 @@ async def test_options_flow_add_provider_then_record(hass: HomeAssistant) -> Non
 
             result = await hass.config_entries.options.async_configure(
                 result["flow_id"],
-                {"provider": {CONF_PROVIDER_TYPE: PROVIDER_DUCKDNS, "name": "Duck home"}},
+                {"provider": {CONF_PROVIDER_TYPE: PROVIDER_DUCKDNS}},
             )
             assert result["step_id"] == "add_provider_duckdns"
 
@@ -100,12 +100,12 @@ async def test_options_flow_add_provider_then_record(hass: HomeAssistant) -> Non
         assert result["step_id"] == "add_record_select_provider"
 
         result = await hass.config_entries.options.async_configure(
-            result["flow_id"], {CONF_PROVIDER_ID: provider_id}
+            result["flow_id"], {"selection": {CONF_PROVIDER_ID: provider_id}}
         )
         assert result["step_id"] == "add_record_ip_mode"
 
         result = await hass.config_entries.options.async_configure(
-            result["flow_id"], {"ip_mode": "auto"}
+            result["flow_id"], {"strategy": {"ip_mode": "auto"}}
         )
         assert result["type"] == "create_entry"
         assert len(result["data"][CONF_RECORDS]) == 1

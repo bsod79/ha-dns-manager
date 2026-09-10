@@ -5,7 +5,15 @@
         "title": "DNS Manager",
         "description": "Create an instance, then configure providers and records in Options.",
         "data": {
-          "instance_name": "Instance name"
+          "setup": "Setup"
+        },
+        "sections": {
+          "setup": {
+            "name": "Instance",
+            "data": {
+              "instance_name": "Instance name"
+            }
+          }
         }
       }
     },
@@ -64,10 +72,9 @@
         },
         "sections": {
           "provider": {
-            "name": "Provider",
+            "name": "Provider type",
             "data": {
-              "provider_type": "Type",
-              "name": "Display name (optional)"
+              "provider_type": "Type"
             }
           }
         }
@@ -152,62 +159,134 @@
       "remove_provider_select": {
         "title": "Remove provider",
         "data": {
-          "provider_id": "Provider"
+          "selection": "Selection"
+        },
+        "sections": {
+          "selection": {
+            "name": "Provider",
+            "data": {
+              "provider_id": "Provider"
+            }
+          }
         }
       },
       "add_record_select_provider": {
         "title": "Add managed record",
         "description": "Choose a saved provider. Credentials are reused — no need to re-enter them.",
         "data": {
-          "provider_id": "Provider"
+          "selection": "Selection"
+        },
+        "sections": {
+          "selection": {
+            "name": "Provider",
+            "data": {
+              "provider_id": "Provider"
+            }
+          }
         }
       },
       "add_record_cloudflare_select": {
         "title": "Select A record",
         "data": {
-          "record_id": "Record"
+          "record": "Record"
+        },
+        "sections": {
+          "record": {
+            "name": "DNS record",
+            "data": {
+              "record_id": "Record"
+            }
+          }
         }
       },
       "add_record_ip_mode": {
         "title": "IP strategy",
         "data": {
-          "ip_mode": "How to get the expected IP"
+          "strategy": "Strategy"
+        },
+        "sections": {
+          "strategy": {
+            "name": "IP strategy",
+            "data": {
+              "ip_mode": "How to get the expected IP"
+            }
+          }
         }
       },
       "add_record_ip_details": {
         "title": "IP details",
         "data": {
-          "static_ip": "Static IPv4",
-          "ip_url": "IP detection URL"
+          "details": "Details"
         },
-        "data_description": {
-          "ip_url": "Plain text or JSON with an ip field."
+        "sections": {
+          "details": {
+            "name": "IP details",
+            "data": {
+              "static_ip": "Static IPv4",
+              "ip_url": "IP detection URL"
+            },
+            "data_description": {
+              "ip_url": "Plain text or JSON with an ip field."
+            }
+          }
         }
       },
       "edit_record_select": {
         "title": "Edit managed record",
         "data": {
-          "record_uid": "Record"
+          "selection": "Selection"
+        },
+        "sections": {
+          "selection": {
+            "name": "Record",
+            "data": {
+              "record_uid": "Record"
+            }
+          }
         }
       },
       "edit_record_ip_mode": {
         "title": "IP strategy",
         "data": {
-          "ip_mode": "How to get the expected IP",
-          "enabled": "Enabled"
+          "strategy": "Strategy"
+        },
+        "sections": {
+          "strategy": {
+            "name": "IP strategy",
+            "data": {
+              "ip_mode": "How to get the expected IP",
+              "enabled": "Enabled"
+            }
+          }
         }
       },
       "edit_record_ip_details": {
         "title": "IP details",
         "data": {
-          "static_ip": "Static IPv4",
-          "ip_url": "IP detection URL"
+          "details": "Details"
+        },
+        "sections": {
+          "details": {
+            "name": "IP details",
+            "data": {
+              "static_ip": "Static IPv4",
+              "ip_url": "IP detection URL"
+            }
+          }
         }
       },
       "remove_record_select": {
         "title": "Remove managed record",
         "data": {
-          "record_uid": "Record"
+          "selection": "Selection"
+        },
+        "sections": {
+          "selection": {
+            "name": "Record",
+            "data": {
+              "record_uid": "Record"
+            }
+          }
         }
       }
     },

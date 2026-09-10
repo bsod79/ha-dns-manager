@@ -4,8 +4,13 @@
       "user": {
         "title": "DNS Manager",
         "description": "Crea un'istanza, poi configura provider e record dalle Opzioni.",
-        "data": {
-          "instance_name": "Nome istanza"
+        "sections": {
+          "setup": {
+            "name": "Istanza",
+            "data": {
+              "instance_name": "Nome istanza"
+            }
+          }
         }
       }
     },
@@ -36,31 +41,62 @@
           "remove_provider_select": "Rimuovi provider"
         }
       },
+      "add_provider_type": {
+        "title": "Aggiungi provider",
+        "sections": {
+          "provider": {
+            "name": "Tipo di provider",
+            "data": {
+              "provider_type": "Tipo"
+            }
+          }
+        }
+      },
       "add_record_select_provider": {
         "title": "Aggiungi record gestito",
         "description": "Scegli un provider già salvato. Non serve reinserire le credenziali.",
-        "data": {
-          "provider_id": "Provider"
+        "sections": {
+          "selection": {
+            "name": "Provider",
+            "data": {
+              "provider_id": "Provider"
+            }
+          }
         }
       },
       "add_record_ip_mode": {
         "title": "Strategia IP",
-        "data": {
-          "ip_mode": "Come ottenere l'IP atteso"
+        "sections": {
+          "strategy": {
+            "name": "Strategia IP",
+            "data": {
+              "ip_mode": "Come ottenere l'IP atteso"
+            }
+          }
         }
       },
       "add_record_ip_details": {
         "title": "Dettagli IP",
-        "data": {
-          "static_ip": "IPv4 statico",
-          "ip_url": "URL rilevamento IP"
+        "sections": {
+          "details": {
+            "name": "Dettagli IP",
+            "data": {
+              "static_ip": "IPv4 statico",
+              "ip_url": "URL rilevamento IP"
+            }
+          }
         }
       },
       "edit_record_ip_mode": {
         "title": "Strategia IP",
-        "data": {
-          "ip_mode": "Come ottenere l'IP atteso",
-          "enabled": "Abilitato"
+        "sections": {
+          "strategy": {
+            "name": "Strategia IP",
+            "data": {
+              "ip_mode": "Come ottenere l'IP atteso",
+              "enabled": "Abilitato"
+            }
+          }
         }
       }
     },
