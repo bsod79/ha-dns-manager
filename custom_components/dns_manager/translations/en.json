@@ -73,7 +73,7 @@
       },
       "add_provider_type": {
         "title": "Add provider — Type",
-        "description": "Step 1: choose the provider type.",
+        "description": "Step 1: choose the provider type. If a provider for the same zone or hostname already exists, its credentials are updated instead of creating a duplicate.",
         "sections": {
           "provider": {
             "name": "Provider",

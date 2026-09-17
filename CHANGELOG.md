@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.5.3
+
+- Fix duplicate providers: adding a provider for a zone/hostname that already exists now updates its credentials in place instead of creating a second entry.
+- Existing duplicates (e.g. legacy-migrated Cloudflare zone + manually re-added one) are merged automatically on load; records are re-linked to the surviving provider.
+- Provider labels no longer repeat the zone/hostname (`Cloudflare — example.com` instead of `Cloudflare — example.com (Cloudflare: example.com)`).
+
 ## 0.5.2
 
 - Options UI restructured for consistency: `General settings` / `Providers` / `Managed records`, each sub-menu with Add/Edit/Remove and a Back entry.

@@ -52,13 +52,118 @@ def provider_display_label(prov: dict[str, Any]) -> str:
         detail = f"{cfg[CONF_SUBDOMAIN]}.duckdns.org"
     elif cfg.get(CONF_HOSTNAME):
         detail = str(cfg[CONF_HOSTNAME])
+    if name and detail and detail.lower() in name.lower():
+        # Auto-generated names already read "Type — detail"; don't repeat it.
+        return name
     if name and detail:
         return f"{name} ({type_label}: {detail})"
     if name:
         return f"{name} ({type_label})"
     if detail:
-        return f"{type_label}: {detail}"
+        return f"{type_label} — {detail}"
     return type_label or provider_uid(prov)
+
+
+def provider_identity(provider_type: str, config: dict[str, Any]) -> str | None:
+    """Logical identity of a provider: two providers with the same identity target the same DNS.
+
+    Cloudflare → zone id; DuckDNS → subdomain; other DDNS → hostname.
+    Credentials are deliberately excluded so re-entering a token doesn't create a duplicate.
+    """
+    if provider_type == PROVIDER_CLOUDFLARE:
+        zone = str(config.get(CONF_ZONE_ID) or "").strip().lower()
+        return f"{provider_type}:{zone}" if zone else None
+    if provider_type == PROVIDER_DUCKDNS:
+        sub = str(config.get(CONF_SUBDOMAIN) or "").strip().lower()
+        return f"{provider_type}:{sub}" if sub else None
+    host = str(config.get(CONF_HOSTNAME) or "").strip().lower()
+    return f"{provider_type}:{host}" if host else None
+
+
+def _identity_of(prov: dict[str, Any]) -> str | None:
+    return provider_identity(
+        str(prov.get(CONF_PROVIDER_TYPE, "")), dict(prov.get(CONF_PROVIDER_CONFIG) or {})
+    )
+
+
+def find_provider_by_identity(
+    providers: list[dict[str, Any]], provider_type: str, config: dict[str, Any]
+) -> dict[str, Any] | None:
+    ident = provider_identity(provider_type, config)
+    if ident is None:
+        return None
+    for prov in providers:
+        if _identity_of(prov) == ident:
+            return prov
+    return None
+
+
+def upsert_provider(
+    providers: list[dict[str, Any]],
+    *,
+    provider_type: str,
+    name: str,
+    config: dict[str, Any],
+) -> tuple[str, bool]:
+    """Add a provider, or refresh credentials of the one with the same identity.
+
+    Mutates `providers` in place. Returns (provider_id, updated_existing).
+    """
+    existing = find_provider_by_identity(providers, provider_type, config)
+    if existing is not None:
+        existing[CONF_PROVIDER_NAME] = name
+        existing[CONF_PROVIDER_TYPE] = provider_type
+        existing[CONF_PROVIDER_CONFIG] = dict(config)
+        return provider_uid(existing), True
+
+    pid = str(uuid.uuid4())
+    providers.append(
+        {
+            CONF_PROVIDER_ID: pid,
+            CONF_PROVIDER_NAME: name,
+            CONF_PROVIDER_TYPE: provider_type,
+            CONF_PROVIDER_CONFIG: dict(config),
+        }
+    )
+    return pid, False
+
+
+def dedupe_providers(
+    providers: list[dict[str, Any]], records: list[dict[str, Any]]
+) -> tuple[list[dict[str, Any]], list[dict[str, Any]], bool]:
+    """Merge providers sharing an identity (newest wins) and re-link their records."""
+    survivor: dict[str, str] = {}
+    for prov in providers:
+        ident = _identity_of(prov)
+        if ident is not None:
+            survivor[ident] = provider_uid(prov)  # last one wins
+
+    remap: dict[str, str] = {}
+    kept: list[dict[str, Any]] = []
+    for prov in providers:
+        ident = _identity_of(prov)
+        pid = provider_uid(prov)
+        if ident is not None and survivor[ident] != pid:
+            remap[pid] = survivor[ident]
+            continue
+        kept.append(prov)
+
+    if not remap:
+        return providers, records, False
+
+    new_records: list[dict[str, Any]] = []
+    seen: set[tuple[str, str]] = set()
+    for rec in records:
+        out = dict(rec)
+        pid = str(out.get(CONF_PROVIDER_ID) or "")
+        if pid in remap:
+            out[CONF_PROVIDER_ID] = remap[pid]
+        key = (str(out.get(CONF_PROVIDER_ID) or ""), str(out.get(CONF_RECORD_NAME) or out.get(CONF_RECORD_ID) or "").lower())
+        if key in seen:
+            continue  # same record on the merged provider
+        seen.add(key)
+        new_records.append(out)
+    return kept, new_records, True
 
 
 def get_providers(entry: ConfigEntry) -> list[dict[str, Any]]:
@@ -167,7 +272,8 @@ def migrate_options(entry: ConfigEntry) -> tuple[list[dict[str, Any]], list[dict
         changed = True
         new_records.append(out)
 
-    return providers, new_records, changed
+    providers, new_records, deduped = dedupe_providers(providers, new_records)
+    return providers, new_records, changed or deduped
 
 
 def find_provider_in_list(providers: list[dict[str, Any]], provider_id: str) -> dict[str, Any] | None:

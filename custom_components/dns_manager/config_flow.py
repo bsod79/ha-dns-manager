@@ -26,7 +26,6 @@ from .const import (
     CONF_PASSWORD,
     CONF_PROVIDER_CONFIG,
     CONF_PROVIDER_ID,
-    CONF_PROVIDER_NAME,
     CONF_PROVIDER_TYPE,
     CONF_RECORD_ID,
     CONF_RECORD_NAME,
@@ -63,6 +62,7 @@ from .options_model import (
     migrate_options,
     provider_display_label,
     provider_uid,
+    upsert_provider,
 )
 from .providers import get_provider
 from .providers.base import DnsRecord, ProviderConfig
@@ -338,13 +338,11 @@ class DnsManagerOptionsFlow(config_entries.OptionsFlow):
                 CONF_ZONE_ID: zone_id,
                 CONF_ZONE_NAME: zone_name,
             }
-            self._providers.append(
-                {
-                    CONF_PROVIDER_ID: str(uuid.uuid4()),
-                    CONF_PROVIDER_NAME: f"Cloudflare — {zone_name}",
-                    CONF_PROVIDER_TYPE: PROVIDER_CLOUDFLARE,
-                    CONF_PROVIDER_CONFIG: dict(self._adding_provider_config),
-                }
+            upsert_provider(
+                self._providers,
+                provider_type=PROVIDER_CLOUDFLARE,
+                name=f"Cloudflare — {zone_name}",
+                config=self._adding_provider_config,
             )
             return self._save()
 
@@ -375,13 +373,11 @@ class DnsManagerOptionsFlow(config_entries.OptionsFlow):
                     )
                 )
                 await provider.validate_credentials()
-                self._providers.append(
-                    {
-                        CONF_PROVIDER_ID: str(uuid.uuid4()),
-                        CONF_PROVIDER_NAME: f"DuckDNS — {subdomain}",
-                        CONF_PROVIDER_TYPE: PROVIDER_DUCKDNS,
-                        CONF_PROVIDER_CONFIG: {CONF_SUBDOMAIN: subdomain, CONF_TOKEN: token},
-                    }
+                upsert_provider(
+                    self._providers,
+                    provider_type=PROVIDER_DUCKDNS,
+                    name=f"DuckDNS — {subdomain}",
+                    config={CONF_SUBDOMAIN: subdomain, CONF_TOKEN: token},
                 )
                 return self._save()
             except ProviderAuthError:
@@ -426,17 +422,15 @@ class DnsManagerOptionsFlow(config_entries.OptionsFlow):
                 )
                 await provider.validate_credentials()
                 label = PROVIDER_LABELS.get(provider_type, provider_type)
-                self._providers.append(
-                    {
-                        CONF_PROVIDER_ID: str(uuid.uuid4()),
-                        CONF_PROVIDER_NAME: f"{label} — {hostname}",
-                        CONF_PROVIDER_TYPE: provider_type,
-                        CONF_PROVIDER_CONFIG: {
-                            CONF_HOSTNAME: hostname,
-                            CONF_USERNAME: username,
-                            CONF_PASSWORD: password,
-                        },
-                    }
+                upsert_provider(
+                    self._providers,
+                    provider_type=provider_type,
+                    name=f"{label} — {hostname}",
+                    config={
+                        CONF_HOSTNAME: hostname,
+                        CONF_USERNAME: username,
+                        CONF_PASSWORD: password,
+                    },
                 )
                 return self._save()
             except ProviderAuthError:
@@ -474,13 +468,11 @@ class DnsManagerOptionsFlow(config_entries.OptionsFlow):
                     )
                 )
                 await provider.validate_credentials()
-                self._providers.append(
-                    {
-                        CONF_PROVIDER_ID: str(uuid.uuid4()),
-                        CONF_PROVIDER_NAME: f"dynv6 — {hostname}",
-                        CONF_PROVIDER_TYPE: PROVIDER_DYNV6,
-                        CONF_PROVIDER_CONFIG: {CONF_HOSTNAME: hostname, CONF_TOKEN: token},
-                    }
+                upsert_provider(
+                    self._providers,
+                    provider_type=PROVIDER_DYNV6,
+                    name=f"dynv6 — {hostname}",
+                    config={CONF_HOSTNAME: hostname, CONF_TOKEN: token},
                 )
                 return self._save()
             except ProviderAuthError:
