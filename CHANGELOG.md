@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.6.1
+
+- Fix Italian translations: remove UTF-8 BOM that prevented HA from parsing `it.json`.
+
 ## 0.6.0
 
 - DuckDNS account model: provider stores only the account token; each managed record is a subdomain (legacy subdomain+token providers are migrated automatically).
