@@ -165,12 +165,58 @@ def test_upsert_provider_updates_existing_same_identity():
     pid2, updated2 = upsert_provider(
         providers,
         provider_type="duckdns",
-        name="DuckDNS — x",
-        config={"subdomain": "x", "token": "t"},
+        name="DuckDNS",
+        config={"token": "t"},
     )
     assert updated2 is False
     assert pid2 != "p1"
     assert len(providers) == 2
+
+
+def test_migrate_duckdns_subdomain_provider_to_account():
+    """Legacy DuckDNS provider with subdomain+token → token-only + managed record."""
+    entry = config_entries.ConfigEntry(
+        version=3,
+        domain="dns_manager",
+        title="My DNS",
+        data={},
+        options={
+            CONF_PROVIDERS: [
+                {
+                    CONF_PROVIDER_ID: "p1",
+                    "name": "DuckDNS — myhost",
+                    CONF_PROVIDER_TYPE: "duckdns",
+                    CONF_PROVIDER_CONFIG: {"subdomain": "myhost", "token": "tok"},
+                }
+            ],
+            CONF_RECORDS: [],
+        },
+        source="user",
+        entry_id="1",
+        unique_id=None,
+    )
+    providers, records, changed = migrate_options(entry)
+    assert changed is True
+    assert len(providers) == 1
+    assert providers[0][CONF_PROVIDER_CONFIG] == {"token": "tok"}
+    assert "subdomain" not in providers[0][CONF_PROVIDER_CONFIG]
+    assert len(records) == 1
+    assert records[0]["name"] == "myhost.duckdns.org"
+    assert records[0][CONF_PROVIDER_ID] == providers[0][CONF_PROVIDER_ID]
+
+
+def test_upsert_duckdns_merges_same_token():
+    providers: list = []
+    pid1, updated1 = upsert_provider(
+        providers, provider_type="duckdns", name="DuckDNS", config={"token": "same"}
+    )
+    pid2, updated2 = upsert_provider(
+        providers, provider_type="duckdns", name="DuckDNS", config={"token": "same"}
+    )
+    assert updated1 is False
+    assert updated2 is True
+    assert pid1 == pid2
+    assert len(providers) == 1
 
 
 def test_provider_display_label_not_redundant():

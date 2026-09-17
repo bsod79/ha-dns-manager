@@ -11,6 +11,7 @@ from homeassistant.helpers.aiohttp_client import async_get_clientsession
 from .const import (
     ATTR_CONFIG_ENTRY_ID,
     ATTR_IP_OVERRIDE,
+    ATTR_IPV6_OVERRIDE,
     ATTR_RECORD_NAME,
     CONF_ENABLED,
     CONF_PROVIDER_TYPE,
@@ -23,12 +24,12 @@ from .const import (
 )
 from .coordinator import DnsManagerCoordinator
 from .exceptions import DNSManagerError
-from .expected_ip import resolve_expected_ip
+from .expected_ip import resolve_expected_addresses
 from .providers import get_provider_for_record
-from .providers.base import DnsRecord
 from .providers.record_context import (
     normalize_record,
     provider_record_id,
+    provider_record_id_aaaa,
     record_uid,
     zone_id_for_record,
 )
@@ -36,6 +37,10 @@ from .providers.record_context import (
 
 def _validate_ipv4(value: str) -> str:
     return str(ipaddress.IPv4Address(value))
+
+
+def _validate_ipv6(value: str) -> str:
+    return str(ipaddress.IPv6Address(value))
 
 
 async def async_register_services(hass: HomeAssistant) -> None:
@@ -62,12 +67,18 @@ async def async_register_services(hass: HomeAssistant) -> None:
     async def handle_update_record(call: ServiceCall) -> None:
         record_name = str(call.data[ATTR_RECORD_NAME])
         ip_override = call.data.get(ATTR_IP_OVERRIDE)
+        ipv6_override = call.data.get(ATTR_IPV6_OVERRIDE)
         ip_override_s: str | None = None
+        ipv6_override_s: str | None = None
         if ip_override:
             ip_override_s = _validate_ipv4(str(ip_override))
+        if ipv6_override:
+            ipv6_override_s = _validate_ipv6(str(ipv6_override))
 
         for coord in await _get_target_coordinators(call):
-            await async_update_record_by_name(coord, record_name, ip_override_s)
+            await async_update_record_by_name(
+                coord, record_name, ip_override_s, ipv6_override_s
+            )
 
     hass.services.async_register(DOMAIN, SERVICE_REFRESH_STATUS, handle_refresh)
     hass.services.async_register(DOMAIN, SERVICE_UPDATE_ALL, handle_update_all)
@@ -80,19 +91,23 @@ async def async_unregister_services(hass: HomeAssistant) -> None:
             hass.services.async_remove(DOMAIN, name)
 
 
-async def _async_expected_ip(
+async def _async_expected(
     coord: DnsManagerCoordinator,
     rec_cfg: dict,
     *,
-    ip_override: str | None,
-) -> str:
+    ipv4_override: str | None,
+    ipv6_override: str | None,
+):
     session = async_get_clientsession(coord.hass)
     public_ip = coord.data.public_ip if coord.data else ""
-    return await resolve_expected_ip(
+    public_ipv6 = coord.data.public_ipv6 if coord.data else ""
+    return await resolve_expected_addresses(
         session,
         rec_cfg,
-        public_ip=public_ip,
-        ip_override=ip_override,
+        public_ipv4=public_ip,
+        public_ipv6=public_ipv6,
+        ipv4_override=ipv4_override,
+        ipv6_override=ipv6_override,
     )
 
 
@@ -124,33 +139,49 @@ async def async_update_record_by_uid(coord: DnsManagerCoordinator, uid: str) -> 
     record_name = str(rec_cfg.get(CONF_RECORD_NAME, uid))
 
     try:
-        expected = await _async_expected_ip(coord, rec_cfg, ip_override=None)
-        if not expected:
+        expected = await _async_expected(coord, rec_cfg, ipv4_override=None, ipv6_override=None)
+        if expected.ipv4 is None and expected.ipv6 is None:
+            log.warning("Update skipped: both IP families off", record_uid=uid, name=record_name)
+            return
+        if (expected.ipv4 is not None and not expected.ipv4) and (
+            expected.ipv6 is not None and not expected.ipv6
+        ):
             log.warning("Update skipped: no expected IP", record_uid=uid, name=record_name)
             return
 
         provider = get_provider_for_record(rec_cfg, coord.entry)
         zone_id = zone_id_for_record(rec_cfg, coord.entry)
-        prov_rec_id = provider_record_id(rec_cfg)
 
         log.info(
             "Updating DNS record",
             record_uid=uid,
             name=record_name,
             provider=rec_cfg.get(CONF_PROVIDER_TYPE),
-            expected_ip=expected,
+            ipv4=expected.ipv4,
+            ipv6=expected.ipv6,
         )
-        current: DnsRecord = await provider.get_record(zone_id, prov_rec_id)
-        await provider.update_record(zone_id, current, expected)
+        await provider.update_addresses(
+            zone_id,
+            name=record_name,
+            record_id=provider_record_id(rec_cfg),
+            record_id_aaaa=provider_record_id_aaaa(rec_cfg),
+            ipv4=expected.ipv4 if expected.ipv4 else None,
+            ipv6=expected.ipv6 if expected.ipv6 else None,
+        )
         coord.set_last_updated(uid)
-        log.info("DNS record updated", record_uid=uid, name=record_name, ip=expected)
+        log.info(
+            "DNS record updated",
+            record_uid=uid,
+            name=record_name,
+            ipv4=expected.ipv4,
+            ipv6=expected.ipv6,
+        )
     except DNSManagerError as err:
         log.error("DNS record update failed", record_uid=uid, error=str(err))
         raise HomeAssistantError(str(err)) from err
 
 
 async def async_update_record_by_id(coord: DnsManagerCoordinator, record_id: str) -> None:
-    """Backward-compatible alias: record_id is now record_uid."""
     await async_update_record_by_uid(coord, record_id)
 
 
@@ -158,6 +189,7 @@ async def async_update_record_by_name(
     coord: DnsManagerCoordinator,
     record_name: str,
     ip_override: str | None,
+    ipv6_override: str | None = None,
 ) -> None:
     try:
         for rec_cfg in normalize_records(coord):
@@ -167,15 +199,25 @@ async def async_update_record_by_name(
                 continue
 
             uid = record_uid(rec_cfg)
-            expected = await _async_expected_ip(coord, rec_cfg, ip_override=ip_override)
-            if not expected:
+            expected = await _async_expected(
+                coord,
+                rec_cfg,
+                ipv4_override=ip_override,
+                ipv6_override=ipv6_override,
+            )
+            if expected.ipv4 is None and expected.ipv6 is None:
                 continue
 
             provider = get_provider_for_record(rec_cfg, coord.entry)
             zone_id = zone_id_for_record(rec_cfg, coord.entry)
-            prov_rec_id = provider_record_id(rec_cfg)
-            current: DnsRecord = await provider.get_record(zone_id, prov_rec_id)
-            await provider.update_record(zone_id, current, expected)
+            await provider.update_addresses(
+                zone_id,
+                name=str(rec_cfg.get(CONF_RECORD_NAME, uid)),
+                record_id=provider_record_id(rec_cfg),
+                record_id_aaaa=provider_record_id_aaaa(rec_cfg),
+                ipv4=expected.ipv4 if expected.ipv4 else None,
+                ipv6=expected.ipv6 if expected.ipv6 else None,
+            )
             coord.set_last_updated(uid)
 
         await coord.async_request_refresh()

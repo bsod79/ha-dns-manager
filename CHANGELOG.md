@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.6.0
+
+- DuckDNS account model: provider stores only the account token; each managed record is a subdomain (legacy subdomain+token providers are migrated automatically).
+- IPv6 support: per-record IPv4/IPv6 strategies (Auto / From URL / Static / Off), optional global IPv6 detection URL, A+AAAA updates (Cloudflare, DuckDNS, dynv6).
+- Public IPv6 sensor; diagnostics and services accept IPv6 overrides.
+
 ## 0.5.4
 
 - Fix DuckDNS credential validation: the API returns plain text `OK`/`KO`, not JSON — this was causing "Cannot connect" when adding a DuckDNS provider.

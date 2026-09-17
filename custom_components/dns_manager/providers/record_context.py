@@ -12,15 +12,18 @@ from ..const import (
     CONF_PROVIDER_ID,
     CONF_PROVIDER_TYPE,
     CONF_RECORD_ID,
+    CONF_RECORD_ID_AAAA,
     CONF_RECORD_NAME,
     CONF_RECORD_TYPE,
     CONF_RECORD_UID,
     CONF_ZONE_ID,
     PROVIDER_CLOUDFLARE,
+    PROVIDER_DUCKDNS,
     PROVIDER_LABELS,
 )
 from ..options_model import find_provider, resolve_provider_bundle
 from .base import ProviderConfig
+from .ddns import duckdns_subdomain
 
 
 def record_uid(rec: dict[str, Any]) -> str:
@@ -61,6 +64,10 @@ def zone_id_for_record(rec: dict[str, Any], entry: ConfigEntry) -> str:
         return str(cfg[CONF_ZONE_ID])
     if entry.data.get(CONF_ZONE_ID) and rec.get(CONF_PROVIDER_TYPE) == PROVIDER_CLOUDFLARE:
         return str(entry.data[CONF_ZONE_ID])
+    if rec.get(CONF_PROVIDER_TYPE) == PROVIDER_DUCKDNS:
+        rid = str(rec.get(CONF_RECORD_ID) or "")
+        name = str(rec.get(CONF_RECORD_NAME) or "")
+        return duckdns_subdomain(rid or name)
     name = str(rec.get(CONF_RECORD_NAME) or "")
     if name:
         return name
@@ -68,13 +75,17 @@ def zone_id_for_record(rec: dict[str, Any], entry: ConfigEntry) -> str:
 
 
 def provider_record_id(rec: dict[str, Any]) -> str:
-    """Provider-side record identifier."""
+    """Provider-side A-record identifier."""
     if rec.get(CONF_RECORD_ID):
         return str(rec[CONF_RECORD_ID])
     name = str(rec.get(CONF_RECORD_NAME) or "")
     if name:
         return name
     return record_uid(rec)
+
+
+def provider_record_id_aaaa(rec: dict[str, Any]) -> str:
+    return str(rec.get(CONF_RECORD_ID_AAAA) or "")
 
 
 def record_display_label(rec: dict[str, Any], entry: ConfigEntry | None = None) -> str:

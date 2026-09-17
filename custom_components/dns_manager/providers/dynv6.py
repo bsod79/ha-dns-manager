@@ -6,8 +6,8 @@ import aiohttp
 
 from ..const import CONF_HOSTNAME, CONF_TOKEN
 from ..exceptions import ProviderAPIError, ProviderAuthError
-from .base import DNSProvider, DnsRecord
-from .ddns import ddns_record, http_get_text, resolve_ipv4, single_zone
+from .base import AddressPair, DNSProvider, DnsRecord
+from .ddns import ddns_record, http_get_text, resolve_ipv4, resolve_ipv6, single_zone
 
 DYNV6_UPDATE_URL = "https://dynv6.com/api/update"
 
@@ -44,11 +44,59 @@ class Dynv6Provider(DNSProvider):
 
     async def get_record(self, zone_id: str, record_id: str) -> DnsRecord:
         host = self._hostname()
-        ip = await resolve_ipv4(host)
+        try:
+            ip = await resolve_ipv4(host)
+        except Exception:  # noqa: BLE001
+            ip = ""
         return ddns_record(host, ip)
 
+    async def get_addresses(
+        self,
+        zone_id: str,
+        *,
+        name: str,
+        record_id: str = "",
+        record_id_aaaa: str = "",
+    ) -> AddressPair:
+        host = self._hostname()
+        ipv4 = ""
+        ipv6 = ""
+        try:
+            ipv4 = await resolve_ipv4(host)
+        except Exception:  # noqa: BLE001
+            pass
+        try:
+            ipv6 = await resolve_ipv6(host)
+        except Exception:  # noqa: BLE001
+            pass
+        return AddressPair(ipv4=ipv4, ipv6=ipv6)
+
     async def update_record(self, zone_id: str, record: DnsRecord, new_ip: str) -> DnsRecord:
-        url = f"{DYNV6_UPDATE_URL}?hostname={self._hostname()}&token={self._token()}&ipv4={new_ip}"
+        await self.update_addresses(
+            zone_id, name=record.name, record_id=record.record_id, ipv4=new_ip
+        )
+        return ddns_record(self._hostname(), new_ip)
+
+    async def update_addresses(
+        self,
+        zone_id: str,
+        *,
+        name: str,
+        record_id: str = "",
+        record_id_aaaa: str = "",
+        ipv4: str | None = None,
+        ipv6: str | None = None,
+        proxied: bool = False,
+        ttl: int = 1,
+    ) -> AddressPair:
+        params = [f"hostname={self._hostname()}", f"token={self._token()}"]
+        if ipv4 is not None:
+            params.append(f"ipv4={ipv4}")
+        if ipv6 is not None:
+            params.append(f"ipv6={ipv6}")
+        if ipv4 is None and ipv6 is None:
+            return await self.get_addresses(zone_id, name=name, record_id=record_id)
+        url = f"{DYNV6_UPDATE_URL}?{'&'.join(params)}"
         timeout = aiohttp.ClientTimeout(total=30)
         async with aiohttp.ClientSession(timeout=timeout) as session:
             text = await http_get_text(session, url)
@@ -56,4 +104,4 @@ class Dynv6Provider(DNSProvider):
             if "invalid" in text.lower() or "denied" in text.lower():
                 raise ProviderAuthError(text)
             raise ProviderAPIError(f"dynv6 update failed: {text}")
-        return ddns_record(self._hostname(), new_ip)
+        return AddressPair(ipv4=ipv4 or "", ipv6=ipv6 or "")

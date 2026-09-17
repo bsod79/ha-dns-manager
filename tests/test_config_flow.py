@@ -9,6 +9,7 @@ from homeassistant.core import HomeAssistant
 
 from custom_components.dns_manager.const import (
     CONF_IP_DETECTION_URL,
+    CONF_IPV6_MODE,
     CONF_PROVIDER_ID,
     CONF_PROVIDER_TYPE,
     CONF_PROVIDERS,
@@ -16,6 +17,7 @@ from custom_components.dns_manager.const import (
     CONF_SCAN_INTERVAL,
     CONF_SUBDOMAIN,
     CONF_TOKEN,
+    IP_MODE_OFF,
     PROVIDER_DUCKDNS,
 )
 
@@ -59,6 +61,7 @@ async def test_options_flow_add_provider_then_record(hass: HomeAssistant) -> Non
 
     provider = AsyncMock()
     provider.validate_credentials = AsyncMock(return_value=True)
+    provider.validate_with_subdomain = AsyncMock(return_value=True)
 
     with patch("custom_components.dns_manager.config_flow.get_provider", return_value=provider):
         with patch("custom_components.dns_manager.config_flow.DuckDNSProvider", return_value=provider):
@@ -71,7 +74,6 @@ async def test_options_flow_add_provider_then_record(hass: HomeAssistant) -> Non
             assert result["type"] == "menu"
             assert result["menu_options"] == ["add_provider_type", "remove_provider_select", "init"]
 
-            # "Back" returns to the main menu
             result = await hass.config_entries.options.async_configure(
                 result["flow_id"], {"next_step_id": "init"}
             )
@@ -93,32 +95,25 @@ async def test_options_flow_add_provider_then_record(hass: HomeAssistant) -> Non
             )
             assert result["step_id"] == "add_provider_duckdns"
 
+            # Token only — subdomain is chosen when adding a record
             result = await hass.config_entries.options.async_configure(
                 result["flow_id"],
-                {"duckdns": {CONF_SUBDOMAIN: "myhost", CONF_TOKEN: "tok"}},
+                {"duckdns": {CONF_TOKEN: "tok"}},
             )
             assert result["type"] == "create_entry"
             assert len(result["data"][CONF_PROVIDERS]) == 1
+            assert result["data"][CONF_PROVIDERS][0]["provider_config"] == {CONF_TOKEN: "tok"}
             provider_id = result["data"][CONF_PROVIDERS][0][CONF_PROVIDER_ID]
 
-    # Reload entry options from create_entry isn't automatic in unit test — update entry
     hass.config_entries.async_update_entry(entry, options=result["data"])
 
-    with patch("custom_components.dns_manager.config_flow.get_provider", return_value=provider):
+    with patch("custom_components.dns_manager.config_flow.DuckDNSProvider", return_value=provider):
         result = await hass.config_entries.options.async_init(entry.entry_id)
         assert result["menu_options"] == ["general", "providers_menu", "records_menu"]
 
         result = await hass.config_entries.options.async_configure(
             result["flow_id"], {"next_step_id": "records_menu"}
         )
-        assert result["type"] == "menu"
-        assert result["menu_options"] == [
-            "add_record_select_provider",
-            "edit_record_select",
-            "remove_record_select",
-            "init",
-        ]
-
         result = await hass.config_entries.options.async_configure(
             result["flow_id"], {"next_step_id": "add_record_select_provider"}
         )
@@ -127,13 +122,20 @@ async def test_options_flow_add_provider_then_record(hass: HomeAssistant) -> Non
         result = await hass.config_entries.options.async_configure(
             result["flow_id"], {"selection": {CONF_PROVIDER_ID: provider_id}}
         )
+        assert result["step_id"] == "add_record_duckdns_subdomain"
+
+        result = await hass.config_entries.options.async_configure(
+            result["flow_id"], {"subdomain": {CONF_SUBDOMAIN: "myhost"}}
+        )
         assert result["step_id"] == "add_record_ip_mode"
 
         result = await hass.config_entries.options.async_configure(
-            result["flow_id"], {"strategy": {"ip_mode": "auto"}}
+            result["flow_id"],
+            {"strategy": {"ip_mode": "auto", CONF_IPV6_MODE: IP_MODE_OFF}},
         )
         assert result["type"] == "create_entry"
         assert len(result["data"][CONF_RECORDS]) == 1
         rec = result["data"][CONF_RECORDS][0]
         assert rec[CONF_PROVIDER_ID] == provider_id
         assert rec["name"] == "myhost.duckdns.org"
+        assert rec["record_id"] == "myhost"

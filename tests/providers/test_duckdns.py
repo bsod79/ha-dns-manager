@@ -24,74 +24,87 @@ def _session_mock(response: MagicMock) -> MagicMock:
 
 
 @pytest.mark.asyncio
-async def test_duckdns_hostname():
+async def test_duckdns_hostname_for():
     p = DuckDNSProvider(
-        ProviderConfig(
-            provider_type="duckdns",
-            credentials={CONF_SUBDOMAIN: "myhost", CONF_TOKEN: "t"},
-        )
+        ProviderConfig(provider_type="duckdns", credentials={CONF_TOKEN: "t"})
     )
-    assert p.hostname() == "myhost.duckdns.org"
+    assert p.hostname_for("myhost") == "myhost.duckdns.org"
+    assert p.hostname_for("myhost.duckdns.org") == "myhost.duckdns.org"
 
 
 @pytest.mark.asyncio
-async def test_duckdns_validate_ok():
+async def test_duckdns_validate_token_only():
     p = DuckDNSProvider(
-        ProviderConfig(
-            provider_type="duckdns",
-            credentials={CONF_SUBDOMAIN: "myhost", CONF_TOKEN: "t"},
-        )
+        ProviderConfig(provider_type="duckdns", credentials={CONF_TOKEN: "t"})
     )
+    assert await p.validate_credentials() is True
 
+
+@pytest.mark.asyncio
+async def test_duckdns_validate_with_subdomain_ok():
+    p = DuckDNSProvider(
+        ProviderConfig(provider_type="duckdns", credentials={CONF_TOKEN: "t"})
+    )
     resp = MagicMock()
     resp.status = 200
     resp.text = AsyncMock(return_value="OK")
-
     with patch(
         "custom_components.dns_manager.providers.duckdns.aiohttp.ClientSession",
         return_value=_session_mock(resp),
     ):
-        assert await p.validate_credentials() is True
+        assert await p.validate_with_subdomain("myhost") is True
 
 
 @pytest.mark.asyncio
 async def test_duckdns_validate_invalid_token():
     p = DuckDNSProvider(
-        ProviderConfig(
-            provider_type="duckdns",
-            credentials={CONF_SUBDOMAIN: "myhost", CONF_TOKEN: "bad"},
-        )
+        ProviderConfig(provider_type="duckdns", credentials={CONF_TOKEN: "bad"})
     )
-
     resp = MagicMock()
     resp.status = 200
     resp.text = AsyncMock(return_value="KO")
-
     with patch(
         "custom_components.dns_manager.providers.duckdns.aiohttp.ClientSession",
         return_value=_session_mock(resp),
     ):
         with pytest.raises(ProviderAuthError):
-            await p.validate_credentials()
+            await p.validate_with_subdomain("myhost")
+
+
+@pytest.mark.asyncio
+async def test_duckdns_update_addresses_ipv4_and_ipv6():
+    p = DuckDNSProvider(
+        ProviderConfig(provider_type="duckdns", credentials={CONF_TOKEN: "t"})
+    )
+    resp = MagicMock()
+    resp.status = 200
+    resp.text = AsyncMock(return_value="OK")
+    with patch(
+        "custom_components.dns_manager.providers.duckdns.aiohttp.ClientSession",
+        return_value=_session_mock(resp),
+    ):
+        updated = await p.update_addresses(
+            "myhost",
+            name="myhost.duckdns.org",
+            ipv4="1.2.3.4",
+            ipv6="2001:db8::1",
+        )
+    assert updated.ipv4 == "1.2.3.4"
+    assert updated.ipv6 == "2001:db8::1"
 
 
 @pytest.mark.asyncio
 async def test_duckdns_update_ok():
     p = DuckDNSProvider(
-        ProviderConfig(
-            provider_type="duckdns",
-            credentials={CONF_SUBDOMAIN: "myhost", CONF_TOKEN: "t"},
-        )
+        ProviderConfig(provider_type="duckdns", credentials={CONF_TOKEN: "t"})
     )
-
     resp = MagicMock()
     resp.status = 200
     resp.text = AsyncMock(return_value="OK")
-
     record = ddns_record("myhost.duckdns.org", "")
     with patch(
         "custom_components.dns_manager.providers.duckdns.aiohttp.ClientSession",
         return_value=_session_mock(resp),
     ):
-        updated = await p.update_record("myhost.duckdns.org", record, "1.2.3.4")
+        updated = await p.update_record("myhost", record, "1.2.3.4")
     assert updated.current_ip == "1.2.3.4"

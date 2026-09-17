@@ -56,12 +56,15 @@ async def async_get_config_entry_diagnostics(hass: HomeAssistant, entry: ConfigE
 
     if coordinator.data:
         coordinator_snapshot["public_ip"] = coordinator.data.public_ip
+        coordinator_snapshot["public_ipv6"] = coordinator.data.public_ipv6
         coordinator_snapshot["last_checked"] = coordinator.data.last_checked.isoformat()
         coordinator_snapshot["records"] = {
             record_id: {
                 "name": rs.name,
-                "current_ip": rs.current_ip,
-                "expected_ip": rs.expected_ip,
+                "current_ipv4": rs.current_ip,
+                "expected_ipv4": rs.expected_ip,
+                "current_ipv6": rs.current_ipv6,
+                "expected_ipv6": rs.expected_ipv6,
                 "in_sync": rs.in_sync,
                 "last_updated": rs.last_updated.isoformat() if rs.last_updated else None,
                 "provider": rs.provider_type,
@@ -77,6 +80,7 @@ async def async_get_config_entry_diagnostics(hass: HomeAssistant, entry: ConfigE
         "options": {
             CONF_SCAN_INTERVAL: entry.options.get(CONF_SCAN_INTERVAL),
             CONF_IP_DETECTION_URL: entry.options.get(CONF_IP_DETECTION_URL),
+            "ipv6_detection_url": entry.options.get("ipv6_detection_url"),
             CONF_AUTO_SYNC: entry.options.get(CONF_AUTO_SYNC, False),
             "provider_count": len(entry.options.get(CONF_PROVIDERS, [])),
             "managed_record_count": len(entry.options.get(CONF_RECORDS, [])),

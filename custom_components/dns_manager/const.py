@@ -22,9 +22,12 @@ PROVIDER_LABELS: dict[str, str] = {
 }
 
 ZONE_BASED_PROVIDERS: frozenset[str] = frozenset({PROVIDER_CLOUDFLARE})
+# Account-level providers: credentials once, hostname/subdomain chosen per record
+ACCOUNT_BASED_PROVIDERS: frozenset[str] = frozenset({PROVIDER_DUCKDNS})
 
 CONF_SCAN_INTERVAL = "scan_interval"
 CONF_IP_DETECTION_URL = "ip_detection_url"
+CONF_IPV6_DETECTION_URL = "ipv6_detection_url"
 CONF_AUTO_SYNC = "auto_sync"
 CONF_PROVIDERS = "providers"
 CONF_RECORDS = "records"
@@ -54,25 +57,47 @@ CONF_PASSWORD = "password"
 
 CONF_RECORD_UID = "record_uid"
 CONF_RECORD_ID = "record_id"
+CONF_RECORD_ID_AAAA = "record_id_aaaa"
 CONF_RECORD_NAME = "name"
 CONF_RECORD_TYPE = "record_type"
+
+# IPv4 strategy (legacy field names kept for migration)
 CONF_IP_MODE = "ip_mode"
+CONF_STATIC_IP = "static_ip"
+CONF_IP_URL = "ip_url"
+
+# IPv6 strategy
+CONF_IPV6_MODE = "ipv6_mode"
+CONF_STATIC_IPV6 = "static_ipv6"
+CONF_IPV6_URL = "ipv6_url"
+
+CONF_ENABLED = "enabled"
+
+IP_MODE_OFF = "off"
 IP_MODE_AUTO = "auto"
 IP_MODE_URL = "url"
 IP_MODE_STATIC = "static"
-CONF_STATIC_IP = "static_ip"
-CONF_IP_URL = "ip_url"
-CONF_ENABLED = "enabled"
 
 IP_MODE_LABELS: dict[str, str] = {
     IP_MODE_AUTO: "Auto (instance public IP)",
     IP_MODE_URL: "From URL",
-    IP_MODE_STATIC: "Static IP",
+    IP_MODE_STATIC: "Static",
+    IP_MODE_OFF: "Off (do not manage)",
+}
+
+IPV4_MODE_LABELS: dict[str, str] = dict(IP_MODE_LABELS)
+IPV6_MODE_LABELS: dict[str, str] = {
+    IP_MODE_OFF: "Off (do not manage)",
+    IP_MODE_AUTO: "Auto (instance public IPv6)",
+    IP_MODE_URL: "From URL",
+    IP_MODE_STATIC: "Static",
 }
 
 DEFAULT_SCAN_INTERVAL = 300
 DEFAULT_AUTO_SYNC = False
 DEFAULT_IP_DETECTION_URL = "https://api.ipify.org?format=json"
+# Empty = IPv6 auto detection disabled until the user sets a URL
+DEFAULT_IPV6_DETECTION_URL = ""
 
 # ENUM sensor states for managed record vs expected IP (SensorDeviceClass.ENUM)
 RECORD_STATUS_READY = "ready"
@@ -91,3 +116,4 @@ SERVICE_REFRESH_STATUS = "refresh_status"
 ATTR_CONFIG_ENTRY_ID = "config_entry_id"
 ATTR_RECORD_NAME = "record_name"
 ATTR_IP_OVERRIDE = "ip_override"
+ATTR_IPV6_OVERRIDE = "ipv6_override"

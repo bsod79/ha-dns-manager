@@ -11,11 +11,14 @@ from .const import (
     CONF_ENABLED,
     CONF_IP_MODE,
     CONF_IP_URL,
+    CONF_IPV6_MODE,
+    CONF_IPV6_URL,
     CONF_PROVIDER_TYPE,
     CONF_RECORD_NAME,
     CONF_RECORDS,
     CONF_RECORD_TYPE,
     CONF_STATIC_IP,
+    CONF_STATIC_IPV6,
     PROVIDER_LABELS,
     RECORD_STATUS_NOT_READY,
     RECORD_STATUS_OPTIONS,
@@ -33,7 +36,10 @@ async def async_setup_entry(
     async_add_entities: AddEntitiesCallback,
 ) -> None:
     coordinator: DnsManagerCoordinator = entry.runtime_data.coordinator
-    entities: list[SensorEntity] = [PublicIpSensor(coordinator, entry)]
+    entities: list[SensorEntity] = [
+        PublicIpSensor(coordinator, entry),
+        PublicIpv6Sensor(coordinator, entry),
+    ]
 
     for rec_cfg in entry.options.get(CONF_RECORDS, []):
         rec = normalize_record(rec_cfg, entry)
@@ -51,11 +57,32 @@ class PublicIpSensor(DnsManagerEntity, SensorEntity):
     def __init__(self, coordinator: DnsManagerCoordinator, entry: ConfigEntry) -> None:
         super().__init__(coordinator, entry)
         self._attr_unique_id = f"dns_manager_{entry.entry_id}_public_ip"
-        self._attr_name = "Public IP"
+        self._attr_name = "Public IPv4"
 
     @property
     def native_value(self) -> str | None:
         return self.coordinator.data.public_ip if self.coordinator.data else None
+
+    @property
+    def extra_state_attributes(self) -> dict[str, str] | None:
+        if not self.coordinator.data:
+            return None
+        return {"last_checked": self.coordinator.data.last_checked.isoformat()}
+
+
+class PublicIpv6Sensor(DnsManagerEntity, SensorEntity):
+    _attr_icon = "mdi:ip-network-outline"
+
+    def __init__(self, coordinator: DnsManagerCoordinator, entry: ConfigEntry) -> None:
+        super().__init__(coordinator, entry)
+        self._attr_unique_id = f"dns_manager_{entry.entry_id}_public_ipv6"
+        self._attr_name = "Public IPv6"
+
+    @property
+    def native_value(self) -> str | None:
+        if not self.coordinator.data:
+            return None
+        return self.coordinator.data.public_ipv6 or None
 
     @property
     def extra_state_attributes(self) -> dict[str, str] | None:
@@ -88,12 +115,11 @@ class ManagedRecordStatusSensor(DnsManagerEntity, SensorEntity):
         rs = self.coordinator.data.records.get(self.record_uid_key) if self.coordinator.data else None
         row = self._record_options_row()
         display = rs.name if rs else (str(row.get(CONF_RECORD_NAME, self.record_uid_key)) if row else self.record_uid_key)
-        rtype = str(row.get(CONF_RECORD_TYPE, "A")) if row else "A"
         provider = str(row.get(CONF_PROVIDER_TYPE, "")) if row else ""
         if provider:
             plabel = PROVIDER_LABELS.get(provider, provider)
-            return f"{display} ({rtype}) — {plabel}"
-        return f"{display} ({rtype})"
+            return f"{display} — {plabel}"
+        return display
 
     @property
     def native_value(self) -> str:
@@ -101,6 +127,11 @@ class ManagedRecordStatusSensor(DnsManagerEntity, SensorEntity):
             return RECORD_STATUS_UNKNOWN
         rs = self.coordinator.data.records.get(self.record_uid_key)
         if rs is None:
+            return RECORD_STATUS_UNKNOWN
+        # Unknown when we manage a family but have no expected address yet
+        if (rs.expected_ip == "" and rs.current_ip == "") and (
+            rs.expected_ipv6 == "" and rs.current_ipv6 == ""
+        ):
             return RECORD_STATUS_UNKNOWN
         return RECORD_STATUS_READY if rs.in_sync else RECORD_STATUS_NOT_READY
 
@@ -122,35 +153,35 @@ class ManagedRecordStatusSensor(DnsManagerEntity, SensorEntity):
             return {
                 "record_uid": self.record_uid_key,
                 "record_name": str(row.get(CONF_RECORD_NAME, "")),
-                "record_type": str(row.get(CONF_RECORD_TYPE, "A")),
                 "provider": str(row.get(CONF_PROVIDER_TYPE, "")),
                 "poll_status": "pending",
             }
         rs = self.coordinator.data.records.get(self.record_uid_key)
         if not rs:
-            base: dict[str, str] = {
+            return {
                 "record_uid": self.record_uid_key,
-                "record_type": str(row.get(CONF_RECORD_TYPE, "A")) if row else "A",
                 "poll_status": "missing_status",
             }
-            if row:
-                base["record_name"] = str(row.get(CONF_RECORD_NAME, ""))
-                base["provider"] = str(row.get(CONF_PROVIDER_TYPE, ""))
-            return base
         attrs: dict[str, str] = {
             "record_uid": rs.record_id,
             "record_name": rs.name,
-            "record_type": str(row.get(CONF_RECORD_TYPE, "A")) if row else "A",
             "provider": rs.provider_type or (str(row.get(CONF_PROVIDER_TYPE, "")) if row else ""),
             "ip_mode": str(row.get(CONF_IP_MODE, "")) if row else "",
-            "current_ip": rs.current_ip,
-            "expected_ip": rs.expected_ip,
+            "ipv6_mode": str(row.get(CONF_IPV6_MODE, "")) if row else "",
+            "current_ipv4": rs.current_ip,
+            "expected_ipv4": rs.expected_ip,
+            "current_ipv6": rs.current_ipv6,
+            "expected_ipv6": rs.expected_ipv6,
             "in_sync": str(rs.in_sync),
         }
         if row and row.get(CONF_IP_URL):
             attrs["ip_url"] = str(row.get(CONF_IP_URL))
         if row and row.get(CONF_STATIC_IP):
             attrs["static_ip"] = str(row.get(CONF_STATIC_IP))
+        if row and row.get(CONF_IPV6_URL):
+            attrs["ipv6_url"] = str(row.get(CONF_IPV6_URL))
+        if row and row.get(CONF_STATIC_IPV6):
+            attrs["static_ipv6"] = str(row.get(CONF_STATIC_IPV6))
         if rs.last_updated:
             attrs["last_updated"] = rs.last_updated.isoformat()
         return attrs

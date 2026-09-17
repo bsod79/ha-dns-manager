@@ -4,27 +4,30 @@ Home Assistant custom integration to manage DNS records across multiple provider
 
 ## Model
 
-1. **Providers** (saved once) — Cloudflare zone, DuckDNS, No-IP, DynDNS, dynv6  
-2. **Managed records** — pick a saved provider, then choose IP strategy  
+1. **Providers** (saved once) — Cloudflare zone, DuckDNS account token, No-IP, DynDNS, dynv6  
+2. **Managed records** — pick a saved provider, then choose IPv4/IPv6 strategy  
 
 Each record can use a different provider. Credentials are not re-entered when adding records.
 
-## IP strategy (per record)
+**DuckDNS:** one provider = one account token. Each managed record is a subdomain under that token.
 
-| Mode | Meaning |
-|------|---------|
-| **Auto** | Instance public IP (global detection URL) |
-| **From URL** | Fetch IPv4 from a custom URL |
-| **Static** | Fixed IPv4 |
+## IP strategy (per record, per family)
 
-IP strategy uses a **two-step** options UI (choose mode → only the needed field).
+| Mode | IPv4 (A) | IPv6 (AAAA) |
+|------|----------|-------------|
+| **Auto** | Instance public IPv4 URL | Instance public IPv6 URL (must be set in General) |
+| **From URL** | Custom URL | Custom URL |
+| **Static** | Fixed IPv4 | Fixed IPv6 |
+| **Off** | Do not manage | Do not manage |
+
+Default after migration: IPv4 Auto, IPv6 Off.
 
 ## Setup
 
 1. Add **DNS Manager** (name the instance).
 2. **Options → Providers → Add provider**.
-3. **Options → Managed records → Add record** → select provider → (Cloudflare: pick record) → IP strategy.
-4. Optional: enable **auto_sync** under **Options → General settings**.
+3. **Options → Managed records → Add record** → select provider → (Cloudflare: pick record / DuckDNS: enter subdomain) → IPv4/IPv6 strategy.
+4. Optional: set **IPv6 detection URL** and enable **auto_sync** under **Options → General settings**.
 
 Options menu structure:
 
@@ -36,7 +39,7 @@ Managed records   → Add record · Edit record · Remove record · Back
 
 ## Polling vs updates
 
-- **Polling** checks public/expected IP vs DNS.
+- **Polling** checks expected vs DNS for each enabled IP family.
 - **Writes** only with **auto_sync**, Update buttons, or services.
 
 ## Diagnostics

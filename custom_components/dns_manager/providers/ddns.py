@@ -25,7 +25,25 @@ async def resolve_ipv4(hostname: str) -> str:
         raise ProviderAPIError(f"Could not resolve {hostname}") from err
 
 
-async def http_get_text(session: aiohttp.ClientSession, url: str, *, auth: aiohttp.BasicAuth | None = None) -> str:
+async def resolve_ipv6(hostname: str) -> str:
+    """Resolve hostname to IPv6 via system DNS."""
+    loop = asyncio.get_running_loop()
+
+    def _resolve() -> str:
+        infos = socket.getaddrinfo(hostname, None, socket.AF_INET6, socket.SOCK_STREAM)
+        if not infos:
+            raise OSError("no AAAA")
+        return str(infos[0][4][0])
+
+    try:
+        return str(await loop.run_in_executor(None, _resolve))
+    except OSError as err:
+        raise ProviderAPIError(f"Could not resolve IPv6 for {hostname}") from err
+
+
+async def http_get_text(
+    session: aiohttp.ClientSession, url: str, *, auth: aiohttp.BasicAuth | None = None
+) -> str:
     """Perform GET and return response body as text."""
     timeout = aiohttp.ClientTimeout(total=30)
     async with session.get(url, auth=auth, timeout=timeout) as resp:
@@ -50,14 +68,29 @@ def parse_dyndns_response(text: str) -> tuple[str, str | None]:
     raise ProviderAPIError(f"Unexpected provider response: {text}")
 
 
-def ddns_record(hostname: str, current_ip: str = "") -> DnsRecord:
+def ddns_record(hostname: str, current_ip: str = "", *, record_type: str = "A") -> DnsRecord:
     return DnsRecord(
         record_id=hostname,
         name=hostname,
         current_ip=current_ip,
-        record_type="A",
+        record_type=record_type,
     )
 
 
 def single_zone(hostname: str) -> list[dict[str, Any]]:
     return [{"id": hostname, "name": hostname}]
+
+
+def duckdns_hostname(subdomain: str) -> str:
+    sub = subdomain.strip().lower()
+    if sub.endswith(".duckdns.org"):
+        return sub
+    return f"{sub}.duckdns.org"
+
+
+def duckdns_subdomain(value: str) -> str:
+    """Normalize user input to bare DuckDNS subdomain."""
+    sub = value.strip().lower()
+    if sub.endswith(".duckdns.org"):
+        sub = sub[: -len(".duckdns.org")]
+    return sub.strip(".")

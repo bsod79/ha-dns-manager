@@ -12,11 +12,13 @@ from .activity_log import DnsManagerActivityLog
 from .const import (
     CONF_AUTO_SYNC,
     CONF_IP_DETECTION_URL,
+    CONF_IPV6_DETECTION_URL,
     CONF_PROVIDERS,
     CONF_RECORDS,
     CONF_SCAN_INTERVAL,
     DEFAULT_AUTO_SYNC,
     DEFAULT_IP_DETECTION_URL,
+    DEFAULT_IPV6_DETECTION_URL,
     DEFAULT_SCAN_INTERVAL,
     DOMAIN,
     PLATFORMS,
@@ -49,6 +51,9 @@ async def async_migrate_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
             ip_detection_url=str(
                 entry.options.get(CONF_IP_DETECTION_URL, DEFAULT_IP_DETECTION_URL)
             ),
+            ipv6_detection_url=str(
+                entry.options.get(CONF_IPV6_DETECTION_URL, DEFAULT_IPV6_DETECTION_URL)
+            ),
             auto_sync=bool(entry.options.get(CONF_AUTO_SYNC, DEFAULT_AUTO_SYNC)),
             providers=providers,
             records=records,
@@ -72,6 +77,9 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
             scan_interval=int(entry.options.get(CONF_SCAN_INTERVAL, DEFAULT_SCAN_INTERVAL)),
             ip_detection_url=str(
                 entry.options.get(CONF_IP_DETECTION_URL, DEFAULT_IP_DETECTION_URL)
+            ),
+            ipv6_detection_url=str(
+                entry.options.get(CONF_IPV6_DETECTION_URL, DEFAULT_IPV6_DETECTION_URL)
             ),
             auto_sync=bool(entry.options.get(CONF_AUTO_SYNC, DEFAULT_AUTO_SYNC)),
             providers=providers,

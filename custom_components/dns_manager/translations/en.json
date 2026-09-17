@@ -41,12 +41,14 @@
             "name": "Polling & sync",
             "data": {
               "scan_interval": "Polling interval (seconds)",
-              "ip_detection_url": "Default public IP URL",
+              "ip_detection_url": "Default public IPv4 URL",
+              "ipv6_detection_url": "Default public IPv6 URL (optional)",
               "auto_sync": "Automatically update DNS when out of sync"
             },
             "data_description": {
               "scan_interval": "How often to check status (default 300 s).",
-              "ip_detection_url": "Used by records with the Auto IP strategy.",
+              "ip_detection_url": "Used by records with Auto IPv4 strategy.",
+              "ipv6_detection_url": "Leave empty to disable Auto IPv6. Example: https://api6.ipify.org?format=json",
               "auto_sync": "When enabled, each poll writes DNS for out-of-sync records."
             }
           }
@@ -112,13 +114,16 @@
       },
       "add_provider_duckdns": {
         "title": "Add provider — DuckDNS",
-        "description": "Step 2 of 2: DuckDNS account. The managed record will be subdomain.duckdns.org.",
+        "description": "Step 2 of 2: account token (shared by all subdomains). Optionally enter one subdomain to verify the token now.",
         "sections": {
           "duckdns": {
             "name": "Account",
             "data": {
-              "subdomain": "Subdomain (without .duckdns.org)",
-              "token": "Token"
+              "token": "Token",
+              "subdomain": "Verify with subdomain (optional)"
+            },
+            "data_description": {
+              "subdomain": "Without .duckdns.org. Used only to validate the token; subdomains are chosen when adding records."
             }
           }
         }
@@ -186,6 +191,18 @@
           }
         }
       },
+      "add_record_duckdns_subdomain": {
+        "title": "Add record — DuckDNS subdomain",
+        "description": "Step 2: subdomain for {provider}. The managed hostname will be subdomain.duckdns.org.",
+        "sections": {
+          "subdomain": {
+            "name": "Subdomain",
+            "data": {
+              "subdomain": "Subdomain (without .duckdns.org)"
+            }
+          }
+        }
+      },
       "add_record_ip_mode": {
         "title": "Add record — IP strategy",
         "description": "Record: {record} · Provider: {provider}",
@@ -193,26 +210,31 @@
           "strategy": {
             "name": "IP strategy",
             "data": {
-              "ip_mode": "How to determine the expected IP"
+              "ip_mode": "IPv4 (A record)",
+              "ipv6_mode": "IPv6 (AAAA record)"
             },
             "data_description": {
-              "ip_mode": "Auto uses the instance public IP; From URL fetches from a custom URL; Static uses a fixed IPv4."
+              "ip_mode": "Auto uses the instance public IPv4; From URL / Static as configured. Off skips IPv4.",
+              "ipv6_mode": "Requires a public IPv6 URL in General settings for Auto. Off skips IPv6."
             }
           }
         }
       },
       "add_record_ip_details": {
         "title": "Add record — IP details",
-        "description": "Record: {record} · Provider: {provider} · Strategy: {mode}",
+        "description": "Record: {record} · Provider: {provider} · {mode}",
         "sections": {
           "details": {
             "name": "IP details",
             "data": {
               "static_ip": "Static IPv4",
-              "ip_url": "IP detection URL"
+              "ip_url": "IPv4 detection URL",
+              "static_ipv6": "Static IPv6",
+              "ipv6_url": "IPv6 detection URL"
             },
             "data_description": {
-              "ip_url": "Plain text or JSON with an ip field."
+              "ip_url": "Plain text or JSON with an ip field.",
+              "ipv6_url": "Plain text or JSON with an ip field."
             }
           }
         }
@@ -236,11 +258,13 @@
           "strategy": {
             "name": "IP strategy",
             "data": {
-              "ip_mode": "How to determine the expected IP",
+              "ip_mode": "IPv4 (A record)",
+              "ipv6_mode": "IPv6 (AAAA record)",
               "enabled": "Enabled"
             },
             "data_description": {
-              "ip_mode": "Auto uses the instance public IP; From URL fetches from a custom URL; Static uses a fixed IPv4.",
+              "ip_mode": "Auto uses the instance public IPv4; From URL / Static as configured. Off skips IPv4.",
+              "ipv6_mode": "Requires a public IPv6 URL in General settings for Auto. Off skips IPv6.",
               "enabled": "Disabled records are monitored but never updated."
             }
           }
@@ -248,16 +272,19 @@
       },
       "edit_record_ip_details": {
         "title": "Edit record — IP details",
-        "description": "Record: {record} · Strategy: {mode}",
+        "description": "Record: {record} · {mode}",
         "sections": {
           "details": {
             "name": "IP details",
             "data": {
               "static_ip": "Static IPv4",
-              "ip_url": "IP detection URL"
+              "ip_url": "IPv4 detection URL",
+              "static_ipv6": "Static IPv6",
+              "ipv6_url": "IPv6 detection URL"
             },
             "data_description": {
-              "ip_url": "Plain text or JSON with an ip field."
+              "ip_url": "Plain text or JSON with an ip field.",
+              "ipv6_url": "Plain text or JSON with an ip field."
             }
           }
         }
