@@ -35,6 +35,26 @@ async def test_duckdns_hostname():
 
 
 @pytest.mark.asyncio
+async def test_duckdns_validate_ok():
+    p = DuckDNSProvider(
+        ProviderConfig(
+            provider_type="duckdns",
+            credentials={CONF_SUBDOMAIN: "myhost", CONF_TOKEN: "t"},
+        )
+    )
+
+    resp = MagicMock()
+    resp.status = 200
+    resp.text = AsyncMock(return_value="OK")
+
+    with patch(
+        "custom_components.dns_manager.providers.duckdns.aiohttp.ClientSession",
+        return_value=_session_mock(resp),
+    ):
+        assert await p.validate_credentials() is True
+
+
+@pytest.mark.asyncio
 async def test_duckdns_validate_invalid_token():
     p = DuckDNSProvider(
         ProviderConfig(
@@ -45,7 +65,6 @@ async def test_duckdns_validate_invalid_token():
 
     resp = MagicMock()
     resp.status = 200
-    resp.json = AsyncMock(side_effect=ValueError("not json"))
     resp.text = AsyncMock(return_value="KO")
 
     with patch(

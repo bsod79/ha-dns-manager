@@ -112,7 +112,7 @@
       },
       "add_provider_duckdns": {
         "title": "Add provider — DuckDNS",
-        "description": "Step 2 of 2: DuckDNS account. The managed record will be <subdomain>.duckdns.org.",
+        "description": "Step 2 of 2: DuckDNS account. The managed record will be subdomain.duckdns.org.",
         "sections": {
           "duckdns": {
             "name": "Account",

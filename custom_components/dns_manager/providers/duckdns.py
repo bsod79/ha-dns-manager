@@ -25,21 +25,16 @@ class DuckDNSProvider(DNSProvider):
         return f"{self._subdomain()}.duckdns.org"
 
     async def validate_credentials(self) -> bool:
-        url = f"{DUCKDNS_UPDATE_URL}?domains={self._subdomain()}&token={self._token()}&verbose=true"
+        # DuckDNS returns plain text "OK" or "KO" (not JSON). No IP → updates with caller IP.
+        url = f"{DUCKDNS_UPDATE_URL}?domains={self._subdomain()}&token={self._token()}"
         timeout = aiohttp.ClientTimeout(total=30)
         async with aiohttp.ClientSession(timeout=timeout) as session:
-            async with session.get(url) as resp:
-                if resp.status == 401:
-                    raise ProviderAuthError("Invalid DuckDNS token")
-                try:
-                    payload = await resp.json(content_type=None)
-                except Exception as err:  # noqa: BLE001
-                    text = (await resp.text()).strip()
-                    if text == "KO":
-                        raise ProviderAuthError("Invalid DuckDNS token") from err
-                    raise ProviderAPIError(f"Unexpected DuckDNS response: {text}") from err
-                if not isinstance(payload, dict):
-                    raise ProviderAPIError("Unexpected DuckDNS response")
+            text = await http_get_text(session, url)
+        first = text.splitlines()[0].strip().upper() if text else ""
+        if first == "KO":
+            raise ProviderAuthError("Invalid DuckDNS token or subdomain")
+        if first != "OK":
+            raise ProviderAPIError(f"Unexpected DuckDNS response: {text}")
         return True
 
     async def list_zones(self) -> list[dict]:

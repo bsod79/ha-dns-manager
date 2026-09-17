@@ -1,5 +1,10 @@
 # Changelog
 
+## 0.5.4
+
+- Fix DuckDNS credential validation: the API returns plain text `OK`/`KO`, not JSON — this was causing "Cannot connect" when adding a DuckDNS provider.
+- Fix translation `UNCLOSED_TAG` on the DuckDNS add-provider step (angle brackets around `<subdomain>` were parsed as HTML).
+
 ## 0.5.3
 
 - Fix duplicate providers: adding a provider for a zone/hostname that already exists now updates its credentials in place instead of creating a second entry.
