@@ -69,6 +69,18 @@ async def test_options_flow_add_provider_then_record(hass: HomeAssistant) -> Non
                 result["flow_id"], {"next_step_id": "providers_menu"}
             )
             assert result["type"] == "menu"
+            assert result["menu_options"] == ["add_provider_type", "remove_provider_select", "init"]
+
+            # "Back" returns to the main menu
+            result = await hass.config_entries.options.async_configure(
+                result["flow_id"], {"next_step_id": "init"}
+            )
+            assert result["type"] == "menu"
+            assert result["step_id"] == "init"
+
+            result = await hass.config_entries.options.async_configure(
+                result["flow_id"], {"next_step_id": "providers_menu"}
+            )
 
             result = await hass.config_entries.options.async_configure(
                 result["flow_id"], {"next_step_id": "add_provider_type"}
@@ -94,6 +106,19 @@ async def test_options_flow_add_provider_then_record(hass: HomeAssistant) -> Non
 
     with patch("custom_components.dns_manager.config_flow.get_provider", return_value=provider):
         result = await hass.config_entries.options.async_init(entry.entry_id)
+        assert result["menu_options"] == ["general", "providers_menu", "records_menu"]
+
+        result = await hass.config_entries.options.async_configure(
+            result["flow_id"], {"next_step_id": "records_menu"}
+        )
+        assert result["type"] == "menu"
+        assert result["menu_options"] == [
+            "add_record_select_provider",
+            "edit_record_select",
+            "remove_record_select",
+            "init",
+        ]
+
         result = await hass.config_entries.options.async_configure(
             result["flow_id"], {"next_step_id": "add_record_select_provider"}
         )

@@ -3,10 +3,7 @@
     "step": {
       "user": {
         "title": "DNS Manager",
-        "description": "Create an instance, then configure providers and records in Options.",
-        "data": {
-          "setup": "Setup"
-        },
+        "description": "Create an instance. Providers and managed records are configured afterwards from the integration Options.",
         "sections": {
           "setup": {
             "name": "Instance",
@@ -29,19 +26,16 @@
     "step": {
       "init": {
         "title": "DNS Manager",
+        "description": "Providers: {providers_count} · Managed records: {records_count}",
         "menu_options": {
           "general": "General settings",
-          "providers_menu": "Manage providers",
-          "add_record_select_provider": "Add managed record",
-          "edit_record_select": "Edit managed record",
-          "remove_record_select": "Remove managed record"
+          "providers_menu": "Providers",
+          "records_menu": "Managed records"
         }
       },
       "general": {
         "title": "General settings",
-        "data": {
-          "polling": "Polling"
-        },
+        "description": "Polling and synchronisation settings for this instance.",
         "sections": {
           "polling": {
             "name": "Polling & sync",
@@ -52,7 +46,7 @@
             },
             "data_description": {
               "scan_interval": "How often to check status (default 300 s).",
-              "ip_detection_url": "Used by records with Auto IP strategy.",
+              "ip_detection_url": "Used by records with the Auto IP strategy.",
               "auto_sync": "When enabled, each poll writes DNS for out-of-sync records."
             }
           }
@@ -60,19 +54,29 @@
       },
       "providers_menu": {
         "title": "Providers",
+        "description": "Saved providers: {providers_count}. A provider stores credentials once; records are attached to it.",
         "menu_options": {
           "add_provider_type": "Add provider",
-          "remove_provider_select": "Remove provider"
+          "remove_provider_select": "Remove provider",
+          "init": "Back"
+        }
+      },
+      "records_menu": {
+        "title": "Managed records",
+        "description": "Managed records: {records_count}. Each record uses a saved provider and its own IP strategy.",
+        "menu_options": {
+          "add_record_select_provider": "Add record",
+          "edit_record_select": "Edit record",
+          "remove_record_select": "Remove record",
+          "init": "Back"
         }
       },
       "add_provider_type": {
-        "title": "Add provider",
-        "data": {
-          "provider": "Provider"
-        },
+        "title": "Add provider — Type",
+        "description": "Step 1: choose the provider type.",
         "sections": {
           "provider": {
-            "name": "Provider type",
+            "name": "Provider",
             "data": {
               "provider_type": "Type"
             }
@@ -80,10 +84,8 @@
         }
       },
       "add_provider_cloudflare_credentials": {
-        "title": "Cloudflare credentials",
-        "data": {
-          "auth": "Authentication"
-        },
+        "title": "Add provider — Cloudflare credentials",
+        "description": "Step 2 of 3: authenticate with Cloudflare. An API Token with Zone:Read and DNS:Edit is recommended.",
         "sections": {
           "auth": {
             "name": "Authentication",
@@ -97,10 +99,8 @@
         }
       },
       "add_provider_cloudflare_zone": {
-        "title": "Cloudflare zone",
-        "data": {
-          "zone": "Zone"
-        },
+        "title": "Add provider — Cloudflare zone",
+        "description": "Step 3 of 3: choose the zone this provider will manage ({zones_count} available).",
         "sections": {
           "zone": {
             "name": "Zone",
@@ -111,10 +111,8 @@
         }
       },
       "add_provider_duckdns": {
-        "title": "DuckDNS",
-        "data": {
-          "duckdns": "DuckDNS"
-        },
+        "title": "Add provider — DuckDNS",
+        "description": "Step 2 of 2: DuckDNS account. The managed record will be <subdomain>.duckdns.org.",
         "sections": {
           "duckdns": {
             "name": "Account",
@@ -126,10 +124,8 @@
         }
       },
       "add_provider_hostname_auth": {
-        "title": "Provider account",
-        "data": {
-          "account": "Account"
-        },
+        "title": "Add provider — {provider}",
+        "description": "Step 2 of 2: {provider} account for a single hostname.",
         "sections": {
           "account": {
             "name": "Account",
@@ -142,10 +138,8 @@
         }
       },
       "add_provider_dynv6": {
-        "title": "dynv6",
-        "data": {
-          "dynv6": "dynv6"
-        },
+        "title": "Add provider — dynv6",
+        "description": "Step 2 of 2: dynv6 zone and HTTP token.",
         "sections": {
           "dynv6": {
             "name": "Account",
@@ -158,24 +152,19 @@
       },
       "remove_provider_select": {
         "title": "Remove provider",
-        "data": {
-          "selection": "Selection"
-        },
+        "description": "Saved providers: {providers_count}. A provider still used by a record cannot be removed.",
         "sections": {
           "selection": {
             "name": "Provider",
             "data": {
-              "provider_id": "Provider"
+              "provider_id": "Provider to remove"
             }
           }
         }
       },
       "add_record_select_provider": {
-        "title": "Add managed record",
-        "description": "Choose a saved provider. Credentials are reused — no need to re-enter them.",
-        "data": {
-          "selection": "Selection"
-        },
+        "title": "Add record — Provider",
+        "description": "Step 1: choose a saved provider ({providers_count} available). Credentials are reused.",
         "sections": {
           "selection": {
             "name": "Provider",
@@ -186,10 +175,8 @@
         }
       },
       "add_record_cloudflare_select": {
-        "title": "Select A record",
-        "data": {
-          "record": "Record"
-        },
+        "title": "Add record — DNS record",
+        "description": "Step 2: choose the record to manage on {provider}.",
         "sections": {
           "record": {
             "name": "DNS record",
@@ -200,24 +187,23 @@
         }
       },
       "add_record_ip_mode": {
-        "title": "IP strategy",
-        "data": {
-          "strategy": "Strategy"
-        },
+        "title": "Add record — IP strategy",
+        "description": "Record: {record} · Provider: {provider}",
         "sections": {
           "strategy": {
             "name": "IP strategy",
             "data": {
-              "ip_mode": "How to get the expected IP"
+              "ip_mode": "How to determine the expected IP"
+            },
+            "data_description": {
+              "ip_mode": "Auto uses the instance public IP; From URL fetches from a custom URL; Static uses a fixed IPv4."
             }
           }
         }
       },
       "add_record_ip_details": {
-        "title": "IP details",
-        "data": {
-          "details": "Details"
-        },
+        "title": "Add record — IP details",
+        "description": "Record: {record} · Provider: {provider} · Strategy: {mode}",
         "sections": {
           "details": {
             "name": "IP details",
@@ -232,10 +218,8 @@
         }
       },
       "edit_record_select": {
-        "title": "Edit managed record",
-        "data": {
-          "selection": "Selection"
-        },
+        "title": "Edit record",
+        "description": "Managed records: {records_count}. Choose the record to edit.",
         "sections": {
           "selection": {
             "name": "Record",
@@ -246,53 +230,61 @@
         }
       },
       "edit_record_ip_mode": {
-        "title": "IP strategy",
-        "data": {
-          "strategy": "Strategy"
-        },
+        "title": "Edit record — IP strategy",
+        "description": "Record: {record}",
         "sections": {
           "strategy": {
             "name": "IP strategy",
             "data": {
-              "ip_mode": "How to get the expected IP",
+              "ip_mode": "How to determine the expected IP",
               "enabled": "Enabled"
+            },
+            "data_description": {
+              "ip_mode": "Auto uses the instance public IP; From URL fetches from a custom URL; Static uses a fixed IPv4.",
+              "enabled": "Disabled records are monitored but never updated."
             }
           }
         }
       },
       "edit_record_ip_details": {
-        "title": "IP details",
-        "data": {
-          "details": "Details"
-        },
+        "title": "Edit record — IP details",
+        "description": "Record: {record} · Strategy: {mode}",
         "sections": {
           "details": {
             "name": "IP details",
             "data": {
               "static_ip": "Static IPv4",
               "ip_url": "IP detection URL"
+            },
+            "data_description": {
+              "ip_url": "Plain text or JSON with an ip field."
             }
           }
         }
       },
       "remove_record_select": {
-        "title": "Remove managed record",
-        "data": {
-          "selection": "Selection"
-        },
+        "title": "Remove record",
+        "description": "Managed records: {records_count}. The DNS record itself is not deleted at the provider.",
         "sections": {
           "selection": {
             "name": "Record",
             "data": {
-              "record_uid": "Record"
+              "record_uid": "Record to remove"
             }
           }
         }
       }
     },
+    "error": {
+      "cannot_connect": "Cannot connect",
+      "invalid_auth": "Invalid authentication",
+      "invalid_ip": "Invalid IP address or URL",
+      "record_already_managed": "Record is already managed",
+      "unknown": "Unexpected error"
+    },
     "abort": {
-      "no_managed_records": "No managed records yet.",
-      "no_providers": "Add a provider first (Options → Manage providers).",
+      "no_managed_records": "No managed records yet. Add one from Options → Managed records → Add record.",
+      "no_providers": "No providers yet. Add one from Options → Providers → Add provider.",
       "provider_in_use": "Cannot remove: one or more records still use this provider."
     }
   },

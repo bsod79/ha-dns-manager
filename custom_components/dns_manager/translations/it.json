@@ -3,7 +3,7 @@
     "step": {
       "user": {
         "title": "DNS Manager",
-        "description": "Crea un'istanza, poi configura provider e record dalle Opzioni.",
+        "description": "Crea un'istanza. Provider e record gestiti si configurano in seguito dalle Opzioni dell'integrazione.",
         "sections": {
           "setup": {
             "name": "Istanza",
@@ -26,35 +26,145 @@
     "step": {
       "init": {
         "title": "DNS Manager",
+        "description": "Provider: {providers_count} · Record gestiti: {records_count}",
         "menu_options": {
           "general": "Impostazioni generali",
-          "providers_menu": "Gestisci provider",
-          "add_record_select_provider": "Aggiungi record gestito",
-          "edit_record_select": "Modifica record gestito",
-          "remove_record_select": "Rimuovi record gestito"
+          "providers_menu": "Provider",
+          "records_menu": "Record gestiti"
+        }
+      },
+      "general": {
+        "title": "Impostazioni generali",
+        "description": "Impostazioni di polling e sincronizzazione per questa istanza.",
+        "sections": {
+          "polling": {
+            "name": "Polling e sincronizzazione",
+            "data": {
+              "scan_interval": "Intervallo di polling (secondi)",
+              "ip_detection_url": "URL predefinito per l'IP pubblico",
+              "auto_sync": "Aggiorna automaticamente il DNS se non allineato"
+            },
+            "data_description": {
+              "scan_interval": "Ogni quanto controllare lo stato (predefinito 300 s).",
+              "ip_detection_url": "Usato dai record con strategia IP Auto.",
+              "auto_sync": "Se attivo, a ogni polling vengono scritti i record non allineati."
+            }
+          }
         }
       },
       "providers_menu": {
         "title": "Provider",
+        "description": "Provider salvati: {providers_count}. Un provider memorizza le credenziali una sola volta; i record vi si collegano.",
         "menu_options": {
           "add_provider_type": "Aggiungi provider",
-          "remove_provider_select": "Rimuovi provider"
+          "remove_provider_select": "Rimuovi provider",
+          "init": "Indietro"
+        }
+      },
+      "records_menu": {
+        "title": "Record gestiti",
+        "description": "Record gestiti: {records_count}. Ogni record usa un provider salvato e una propria strategia IP.",
+        "menu_options": {
+          "add_record_select_provider": "Aggiungi record",
+          "edit_record_select": "Modifica record",
+          "remove_record_select": "Rimuovi record",
+          "init": "Indietro"
         }
       },
       "add_provider_type": {
-        "title": "Aggiungi provider",
+        "title": "Aggiungi provider — Tipo",
+        "description": "Passo 1: scegli il tipo di provider.",
         "sections": {
           "provider": {
-            "name": "Tipo di provider",
+            "name": "Provider",
             "data": {
               "provider_type": "Tipo"
             }
           }
         }
       },
+      "add_provider_cloudflare_credentials": {
+        "title": "Aggiungi provider — Credenziali Cloudflare",
+        "description": "Passo 2 di 3: autenticati su Cloudflare. È consigliato un API Token con permessi Zone:Read e DNS:Edit.",
+        "sections": {
+          "auth": {
+            "name": "Autenticazione",
+            "data": {
+              "auth_mode": "Modalità",
+              "api_token": "API token",
+              "api_email": "Email",
+              "api_key": "Global API key"
+            }
+          }
+        }
+      },
+      "add_provider_cloudflare_zone": {
+        "title": "Aggiungi provider — Zona Cloudflare",
+        "description": "Passo 3 di 3: scegli la zona gestita da questo provider ({zones_count} disponibili).",
+        "sections": {
+          "zone": {
+            "name": "Zona",
+            "data": {
+              "zone_id": "Zona"
+            }
+          }
+        }
+      },
+      "add_provider_duckdns": {
+        "title": "Aggiungi provider — DuckDNS",
+        "description": "Passo 2 di 2: account DuckDNS. Il record gestito sarà <sottodominio>.duckdns.org.",
+        "sections": {
+          "duckdns": {
+            "name": "Account",
+            "data": {
+              "subdomain": "Sottodominio (senza .duckdns.org)",
+              "token": "Token"
+            }
+          }
+        }
+      },
+      "add_provider_hostname_auth": {
+        "title": "Aggiungi provider — {provider}",
+        "description": "Passo 2 di 2: account {provider} per un singolo hostname.",
+        "sections": {
+          "account": {
+            "name": "Account",
+            "data": {
+              "hostname": "Hostname (FQDN)",
+              "username": "Nome utente",
+              "password": "Password"
+            }
+          }
+        }
+      },
+      "add_provider_dynv6": {
+        "title": "Aggiungi provider — dynv6",
+        "description": "Passo 2 di 2: zona dynv6 e token HTTP.",
+        "sections": {
+          "dynv6": {
+            "name": "Account",
+            "data": {
+              "hostname": "Hostname (FQDN)",
+              "token": "Token"
+            }
+          }
+        }
+      },
+      "remove_provider_select": {
+        "title": "Rimuovi provider",
+        "description": "Provider salvati: {providers_count}. Un provider ancora usato da un record non può essere rimosso.",
+        "sections": {
+          "selection": {
+            "name": "Provider",
+            "data": {
+              "provider_id": "Provider da rimuovere"
+            }
+          }
+        }
+      },
       "add_record_select_provider": {
-        "title": "Aggiungi record gestito",
-        "description": "Scegli un provider già salvato. Non serve reinserire le credenziali.",
+        "title": "Aggiungi record — Provider",
+        "description": "Passo 1: scegli un provider salvato ({providers_count} disponibili). Le credenziali vengono riutilizzate.",
         "sections": {
           "selection": {
             "name": "Provider",
@@ -64,46 +174,118 @@
           }
         }
       },
+      "add_record_cloudflare_select": {
+        "title": "Aggiungi record — Record DNS",
+        "description": "Passo 2: scegli il record da gestire su {provider}.",
+        "sections": {
+          "record": {
+            "name": "Record DNS",
+            "data": {
+              "record_id": "Record"
+            }
+          }
+        }
+      },
       "add_record_ip_mode": {
-        "title": "Strategia IP",
+        "title": "Aggiungi record — Strategia IP",
+        "description": "Record: {record} · Provider: {provider}",
         "sections": {
           "strategy": {
             "name": "Strategia IP",
             "data": {
-              "ip_mode": "Come ottenere l'IP atteso"
+              "ip_mode": "Come determinare l'IP atteso"
+            },
+            "data_description": {
+              "ip_mode": "Auto usa l'IP pubblico dell'istanza; Da URL lo recupera da un URL personalizzato; Statico usa un IPv4 fisso."
             }
           }
         }
       },
       "add_record_ip_details": {
-        "title": "Dettagli IP",
+        "title": "Aggiungi record — Dettagli IP",
+        "description": "Record: {record} · Provider: {provider} · Strategia: {mode}",
         "sections": {
           "details": {
             "name": "Dettagli IP",
             "data": {
               "static_ip": "IPv4 statico",
               "ip_url": "URL rilevamento IP"
+            },
+            "data_description": {
+              "ip_url": "Testo semplice o JSON con un campo ip."
+            }
+          }
+        }
+      },
+      "edit_record_select": {
+        "title": "Modifica record",
+        "description": "Record gestiti: {records_count}. Scegli il record da modificare.",
+        "sections": {
+          "selection": {
+            "name": "Record",
+            "data": {
+              "record_uid": "Record"
             }
           }
         }
       },
       "edit_record_ip_mode": {
-        "title": "Strategia IP",
+        "title": "Modifica record — Strategia IP",
+        "description": "Record: {record}",
         "sections": {
           "strategy": {
             "name": "Strategia IP",
             "data": {
-              "ip_mode": "Come ottenere l'IP atteso",
+              "ip_mode": "Come determinare l'IP atteso",
               "enabled": "Abilitato"
+            },
+            "data_description": {
+              "ip_mode": "Auto usa l'IP pubblico dell'istanza; Da URL lo recupera da un URL personalizzato; Statico usa un IPv4 fisso.",
+              "enabled": "I record disabilitati vengono monitorati ma mai aggiornati."
+            }
+          }
+        }
+      },
+      "edit_record_ip_details": {
+        "title": "Modifica record — Dettagli IP",
+        "description": "Record: {record} · Strategia: {mode}",
+        "sections": {
+          "details": {
+            "name": "Dettagli IP",
+            "data": {
+              "static_ip": "IPv4 statico",
+              "ip_url": "URL rilevamento IP"
+            },
+            "data_description": {
+              "ip_url": "Testo semplice o JSON con un campo ip."
+            }
+          }
+        }
+      },
+      "remove_record_select": {
+        "title": "Rimuovi record",
+        "description": "Record gestiti: {records_count}. Il record DNS non viene cancellato presso il provider.",
+        "sections": {
+          "selection": {
+            "name": "Record",
+            "data": {
+              "record_uid": "Record da rimuovere"
             }
           }
         }
       }
     },
+    "error": {
+      "cannot_connect": "Impossibile connettersi",
+      "invalid_auth": "Autenticazione non valida",
+      "invalid_ip": "IP o URL non valido",
+      "record_already_managed": "Il record è già gestito",
+      "unknown": "Errore imprevisto"
+    },
     "abort": {
-      "no_managed_records": "Nessun record gestito al momento.",
-      "no_providers": "Aggiungi prima un provider (Opzioni → Gestisci provider).",
-      "provider_in_use": "Impossibile rimuovere: ci sono ancora record collegati a questo provider."
+      "no_managed_records": "Nessun record gestito. Aggiungine uno da Opzioni → Record gestiti → Aggiungi record.",
+      "no_providers": "Nessun provider. Aggiungine uno da Opzioni → Provider → Aggiungi provider.",
+      "provider_in_use": "Impossibile rimuovere: uno o più record usano ancora questo provider."
     }
   },
   "entity": {

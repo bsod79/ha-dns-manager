@@ -179,18 +179,64 @@ class DnsManagerOptionsFlow(config_entries.OptionsFlow):
     def _provider_map(self) -> dict[str, str]:
         return {provider_uid(p): provider_display_label(p) for p in self._providers}
 
+    def _record_map(self) -> dict[str, str]:
+        return {
+            record_uid(r): record_display_label(normalize_record(r, self.config_entry), self.config_entry)
+            for r in self._records
+        }
+
+    def _counts(self) -> dict[str, str]:
+        return {
+            "providers_count": str(len(self._providers)),
+            "records_count": str(len(self._records)),
+        }
+
+    def _selected_provider_label(self) -> str:
+        prov = find_provider_in_list(self._providers, str(self._selected_provider_id))
+        return provider_display_label(prov) if prov else ""
+
+    def _adding_record_label(self) -> str:
+        return f"{self._adding_record_name} ({self._adding_record_type})"
+
+    def _editing_record_label(self) -> str:
+        rec = next((r for r in self._records if record_uid(r) == str(self._editing_record_uid)), None)
+        if rec is None:
+            return ""
+        return record_display_label(normalize_record(rec, self.config_entry), self.config_entry)
+
+    def _ip_mode_label(self) -> str:
+        return IP_MODE_LABELS.get(self._ip_mode_choice, self._ip_mode_choice)
+
+    # --- Menus ---
+
     async def async_step_init(self, user_input: dict[str, Any] | None = None) -> FlowResult:
         self._load_state()
         return self.async_show_menu(
             step_id="init",
+            menu_options=["general", "providers_menu", "records_menu"],
+            description_placeholders=self._counts(),
+        )
+
+    async def async_step_providers_menu(self, user_input: dict[str, Any] | None = None) -> FlowResult:
+        return self.async_show_menu(
+            step_id="providers_menu",
+            menu_options=["add_provider_type", "remove_provider_select", "init"],
+            description_placeholders=self._counts(),
+        )
+
+    async def async_step_records_menu(self, user_input: dict[str, Any] | None = None) -> FlowResult:
+        return self.async_show_menu(
+            step_id="records_menu",
             menu_options=[
-                "general",
-                "providers_menu",
                 "add_record_select_provider",
                 "edit_record_select",
                 "remove_record_select",
+                "init",
             ],
+            description_placeholders=self._counts(),
         )
+
+    # --- General ---
 
     async def async_step_general(self, user_input: dict[str, Any] | None = None) -> FlowResult:
         if user_input is not None:
@@ -213,12 +259,6 @@ class DnsManagerOptionsFlow(config_entries.OptionsFlow):
         )
 
     # --- Providers ---
-
-    async def async_step_providers_menu(self, user_input: dict[str, Any] | None = None) -> FlowResult:
-        return self.async_show_menu(
-            step_id="providers_menu",
-            menu_options=["add_provider_type", "remove_provider_select"],
-        )
 
     async def async_step_add_provider_type(self, user_input: dict[str, Any] | None = None) -> FlowResult:
         if user_input is not None:
@@ -318,6 +358,7 @@ class DnsManagerOptionsFlow(config_entries.OptionsFlow):
             step_id="add_provider_cloudflare_zone",
             data_schema=_sectioned("zone", {vol.Required(CONF_ZONE_ID): vol.In(zones_map)}),
             errors=errors,
+            description_placeholders={"zones_count": str(len(self._zones))},
         )
 
     async def async_step_add_provider_duckdns(self, user_input: dict[str, Any] | None = None) -> FlowResult:
@@ -416,6 +457,7 @@ class DnsManagerOptionsFlow(config_entries.OptionsFlow):
                 },
             ),
             errors=errors,
+            description_placeholders={"provider": PROVIDER_LABELS.get(provider_type, provider_type)},
         )
 
     async def async_step_add_provider_dynv6(self, user_input: dict[str, Any] | None = None) -> FlowResult:
@@ -477,6 +519,7 @@ class DnsManagerOptionsFlow(config_entries.OptionsFlow):
         return self.async_show_form(
             step_id="remove_provider_select",
             data_schema=self._provider_select_schema(),
+            description_placeholders=self._counts(),
         )
 
     # --- Records ---
@@ -503,6 +546,7 @@ class DnsManagerOptionsFlow(config_entries.OptionsFlow):
                     step_id="add_record_select_provider",
                     data_schema=self._provider_select_schema(),
                     errors={"base": "record_already_managed"},
+                    description_placeholders=self._counts(),
                 )
             self._adding_record_id = hostname
             self._adding_record_name = hostname
@@ -512,6 +556,7 @@ class DnsManagerOptionsFlow(config_entries.OptionsFlow):
         return self.async_show_form(
             step_id="add_record_select_provider",
             data_schema=self._provider_select_schema(),
+            description_placeholders=self._counts(),
         )
 
     async def async_step_add_record_cloudflare_select(
@@ -549,6 +594,7 @@ class DnsManagerOptionsFlow(config_entries.OptionsFlow):
             step_id="add_record_cloudflare_select",
             data_schema=_sectioned("record", {vol.Required(CONF_RECORD_ID): vol.In(rec_map)}),
             errors=errors,
+            description_placeholders={"provider": self._selected_provider_label()},
         )
 
     async def async_step_add_record_ip_mode(self, user_input: dict[str, Any] | None = None) -> FlowResult:
@@ -564,6 +610,10 @@ class DnsManagerOptionsFlow(config_entries.OptionsFlow):
                 "strategy",
                 {vol.Required(CONF_IP_MODE, default=IP_MODE_AUTO): vol.In(IP_MODE_LABELS)},
             ),
+            description_placeholders={
+                "record": self._adding_record_label(),
+                "provider": self._selected_provider_label(),
+            },
         )
 
     async def async_step_add_record_ip_details(self, user_input: dict[str, Any] | None = None) -> FlowResult:
@@ -589,6 +639,11 @@ class DnsManagerOptionsFlow(config_entries.OptionsFlow):
             step_id="add_record_ip_details",
             data_schema=_sectioned("details", fields),
             errors=errors,
+            description_placeholders={
+                "record": self._adding_record_label(),
+                "provider": self._selected_provider_label(),
+                "mode": self._ip_mode_label(),
+            },
         )
 
     def _finish_add_record(
@@ -625,13 +680,10 @@ class DnsManagerOptionsFlow(config_entries.OptionsFlow):
             self._ip_mode_choice = str(rec.get(CONF_IP_MODE, IP_MODE_AUTO))
             return await self.async_step_edit_record_ip_mode()
 
-        labels = {
-            record_uid(r): record_display_label(normalize_record(r, self.config_entry), self.config_entry)
-            for r in self._records
-        }
         return self.async_show_form(
             step_id="edit_record_select",
-            data_schema=_sectioned("selection", {vol.Required(CONF_RECORD_UID): vol.In(labels)}),
+            data_schema=_sectioned("selection", {vol.Required(CONF_RECORD_UID): vol.In(self._record_map())}),
+            description_placeholders=self._counts(),
         )
 
     async def async_step_edit_record_ip_mode(self, user_input: dict[str, Any] | None = None) -> FlowResult:
@@ -652,6 +704,7 @@ class DnsManagerOptionsFlow(config_entries.OptionsFlow):
                     vol.Optional(CONF_ENABLED, default=self._edit_enabled): bool,
                 },
             ),
+            description_placeholders={"record": self._editing_record_label()},
         )
 
     async def async_step_edit_record_ip_details(self, user_input: dict[str, Any] | None = None) -> FlowResult:
@@ -683,6 +736,10 @@ class DnsManagerOptionsFlow(config_entries.OptionsFlow):
             step_id="edit_record_ip_details",
             data_schema=_sectioned("details", fields),
             errors=errors,
+            description_placeholders={
+                "record": self._editing_record_label(),
+                "mode": self._ip_mode_label(),
+            },
         )
 
     def _finish_edit_record(
@@ -714,11 +771,8 @@ class DnsManagerOptionsFlow(config_entries.OptionsFlow):
             self._records = [r for r in self._records if record_uid(r) != uid]
             return self._save()
 
-        labels = {
-            record_uid(r): record_display_label(normalize_record(r, self.config_entry), self.config_entry)
-            for r in self._records
-        }
         return self.async_show_form(
             step_id="remove_record_select",
-            data_schema=_sectioned("selection", {vol.Required(CONF_RECORD_UID): vol.In(labels)}),
+            data_schema=_sectioned("selection", {vol.Required(CONF_RECORD_UID): vol.In(self._record_map())}),
+            description_placeholders=self._counts(),
         )

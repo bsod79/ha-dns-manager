@@ -22,9 +22,17 @@ IP strategy uses a **two-step** options UI (choose mode → only the needed fiel
 ## Setup
 
 1. Add **DNS Manager** (name the instance).
-2. **Options → Manage providers → Add provider**.
-3. **Options → Add managed record** → select provider → (Cloudflare: pick A record) → IP strategy.
-4. Optional: enable **auto_sync** under General settings.
+2. **Options → Providers → Add provider**.
+3. **Options → Managed records → Add record** → select provider → (Cloudflare: pick record) → IP strategy.
+4. Optional: enable **auto_sync** under **Options → General settings**.
+
+Options menu structure:
+
+```
+General settings
+Providers         → Add provider · Remove provider · Back
+Managed records   → Add record · Edit record · Remove record · Back
+```
 
 ## Polling vs updates
 
