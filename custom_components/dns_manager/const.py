@@ -23,7 +23,9 @@ PROVIDER_LABELS: dict[str, str] = {
 
 ZONE_BASED_PROVIDERS: frozenset[str] = frozenset({PROVIDER_CLOUDFLARE})
 # Account-level providers: credentials once, hostname/subdomain chosen per record
-ACCOUNT_BASED_PROVIDERS: frozenset[str] = frozenset({PROVIDER_DUCKDNS})
+ACCOUNT_BASED_PROVIDERS: frozenset[str] = frozenset(
+    {PROVIDER_DUCKDNS, PROVIDER_NOIP, PROVIDER_DYNDNS, PROVIDER_DYNV6}
+)
 
 CONF_SCAN_INTERVAL = "scan_interval"
 CONF_IP_DETECTION_URL = "ip_detection_url"

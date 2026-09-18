@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.6.2
+
+- Align No-IP, DynDNS, and dynv6 with the DuckDNS account model: credentials once, hostname chosen per managed record (legacy per-host providers are migrated automatically).
+- No-IP / DynDNS: DDNS key or account username+password; dual-stack via `myip=ipv4,ipv6`; required User-Agent for No-IP.
+- dynv6: HTTP token once; zone/hostname per record.
+
 ## 0.6.1
 
 - Fix Italian translations: remove UTF-8 BOM that prevented HA from parsing `it.json`.

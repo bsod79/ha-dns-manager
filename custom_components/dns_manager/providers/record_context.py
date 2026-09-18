@@ -19,7 +19,10 @@ from ..const import (
     CONF_ZONE_ID,
     PROVIDER_CLOUDFLARE,
     PROVIDER_DUCKDNS,
+    PROVIDER_DYNDNS,
+    PROVIDER_DYNV6,
     PROVIDER_LABELS,
+    PROVIDER_NOIP,
 )
 from ..options_model import find_provider, resolve_provider_bundle
 from .base import ProviderConfig
@@ -64,10 +67,13 @@ def zone_id_for_record(rec: dict[str, Any], entry: ConfigEntry) -> str:
         return str(cfg[CONF_ZONE_ID])
     if entry.data.get(CONF_ZONE_ID) and rec.get(CONF_PROVIDER_TYPE) == PROVIDER_CLOUDFLARE:
         return str(entry.data[CONF_ZONE_ID])
-    if rec.get(CONF_PROVIDER_TYPE) == PROVIDER_DUCKDNS:
+    ptype = str(rec.get(CONF_PROVIDER_TYPE) or "")
+    if ptype == PROVIDER_DUCKDNS:
         rid = str(rec.get(CONF_RECORD_ID) or "")
         name = str(rec.get(CONF_RECORD_NAME) or "")
         return duckdns_subdomain(rid or name)
+    if ptype in (PROVIDER_NOIP, PROVIDER_DYNDNS, PROVIDER_DYNV6):
+        return str(rec.get(CONF_RECORD_NAME) or rec.get(CONF_RECORD_ID) or record_uid(rec)).strip().lower()
     name = str(rec.get(CONF_RECORD_NAME) or "")
     if name:
         return name

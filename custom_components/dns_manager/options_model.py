@@ -17,6 +17,7 @@ from .const import (
     CONF_IP_MODE,
     CONF_IPV6_DETECTION_URL,
     CONF_IPV6_MODE,
+    CONF_PASSWORD,
     CONF_PROVIDER_CONFIG,
     CONF_PROVIDER_ID,
     CONF_PROVIDER_NAME,
@@ -30,6 +31,7 @@ from .const import (
     CONF_SCAN_INTERVAL,
     CONF_SUBDOMAIN,
     CONF_TOKEN,
+    CONF_USERNAME,
     CONF_ZONE_ID,
     CONF_ZONE_NAME,
     DEFAULT_AUTO_SYNC,
@@ -40,7 +42,10 @@ from .const import (
     IP_MODE_OFF,
     PROVIDER_CLOUDFLARE,
     PROVIDER_DUCKDNS,
+    PROVIDER_DYNDNS,
+    PROVIDER_DYNV6,
     PROVIDER_LABELS,
+    PROVIDER_NOIP,
     ZONE_BASED_PROVIDERS,
     ACCOUNT_BASED_PROVIDERS,
 )
@@ -59,9 +64,12 @@ def provider_display_label(prov: dict[str, Any]) -> str:
     detail = ""
     if ptype == PROVIDER_CLOUDFLARE and cfg.get(CONF_ZONE_NAME):
         detail = str(cfg[CONF_ZONE_NAME])
-    elif ptype == PROVIDER_DUCKDNS:
-        # Account-level: no subdomain on provider
-        detail = ""
+    elif ptype in ACCOUNT_BASED_PROVIDERS:
+        # Account-level: no host on the provider
+        if ptype in (PROVIDER_NOIP, PROVIDER_DYNDNS) and cfg.get(CONF_USERNAME):
+            detail = str(cfg[CONF_USERNAME])
+        else:
+            detail = ""
     elif cfg.get(CONF_HOSTNAME):
         detail = str(cfg[CONF_HOSTNAME])
     if name and detail and detail.lower() in name.lower():
@@ -76,16 +84,19 @@ def provider_display_label(prov: dict[str, Any]) -> str:
 
 
 def provider_identity(provider_type: str, config: dict[str, Any]) -> str | None:
-    """Logical identity of a provider.
+    """Logical identity of a provider (credentials account, not per-host).
 
-    Cloudflare → zone id; DuckDNS → account token; other DDNS → hostname.
+    Cloudflare → zone id; DuckDNS/dynv6 → token; No-IP/DynDNS → username.
     """
     if provider_type == PROVIDER_CLOUDFLARE:
         zone = str(config.get(CONF_ZONE_ID) or "").strip().lower()
         return f"{provider_type}:{zone}" if zone else None
-    if provider_type == PROVIDER_DUCKDNS:
+    if provider_type in (PROVIDER_DUCKDNS, PROVIDER_DYNV6):
         token = str(config.get(CONF_TOKEN) or "").strip()
         return f"{provider_type}:token:{token}" if token else None
+    if provider_type in (PROVIDER_NOIP, PROVIDER_DYNDNS):
+        user = str(config.get(CONF_USERNAME) or "").strip().lower()
+        return f"{provider_type}:user:{user}" if user else None
     host = str(config.get(CONF_HOSTNAME) or "").strip().lower()
     return f"{provider_type}:{host}" if host else None
 
@@ -204,55 +215,33 @@ def _ensure_record_ip_defaults(rec: dict[str, Any]) -> bool:
     return changed
 
 
-def _migrate_duckdns_account_providers(
+def _migrate_account_providers(
     providers: list[dict[str, Any]], records: list[dict[str, Any]]
 ) -> tuple[list[dict[str, Any]], list[dict[str, Any]], bool]:
-    """Legacy DuckDNS provider stored subdomain+token → token-only + managed record."""
+    """Legacy per-host DDNS providers → account credentials + managed record.
+
+    DuckDNS: subdomain+token → token
+    No-IP/DynDNS: hostname+user+pass → user+pass
+    dynv6: hostname+token → token
+    """
     changed = False
     out_providers: list[dict[str, Any]] = []
     extra_records: list[dict[str, Any]] = []
 
-    for prov in providers:
-        ptype = str(prov.get(CONF_PROVIDER_TYPE, ""))
-        cfg = dict(prov.get(CONF_PROVIDER_CONFIG) or {})
-        if ptype != PROVIDER_DUCKDNS or CONF_SUBDOMAIN not in cfg:
-            out_providers.append(prov)
-            continue
-
-        subdomain = duckdns_subdomain(str(cfg.get(CONF_SUBDOMAIN) or ""))
-        token = str(cfg.get(CONF_TOKEN) or "").strip()
-        if not token:
-            out_providers.append(prov)
-            continue
-
-        new_cfg = {CONF_TOKEN: token}
-        pid, _ = upsert_provider(
-            out_providers,
-            provider_type=PROVIDER_DUCKDNS,
-            name="DuckDNS",
-            config=new_cfg,
-        )
-        # Prefer keeping original id when upsert created under same list without match
-        # upsert may have added new or updated — ensure this legacy id remaps via records below
-        if provider_uid(prov) != pid:
-            # Remap records that pointed at legacy provider id
-            for rec in records:
-                if str(rec.get(CONF_PROVIDER_ID)) == provider_uid(prov):
-                    rec[CONF_PROVIDER_ID] = pid
-                    changed = True
-
-        host = duckdns_hostname(subdomain)
+    def _ensure_record(pid: str, host: str, record_id: str) -> None:
+        nonlocal changed
+        key = host.lower()
         already = any(
             str(r.get(CONF_PROVIDER_ID)) == pid
-            and str(r.get(CONF_RECORD_NAME) or "").lower() == host
+            and str(r.get(CONF_RECORD_NAME) or "").lower() == key
             for r in records + extra_records
         )
-        if subdomain and not already:
+        if host and not already:
             extra_records.append(
                 {
                     CONF_RECORD_UID: str(uuid.uuid4()),
                     CONF_PROVIDER_ID: pid,
-                    CONF_RECORD_ID: subdomain,
+                    CONF_RECORD_ID: record_id or host,
                     CONF_RECORD_NAME: host,
                     CONF_RECORD_TYPE: "A",
                     CONF_IP_MODE: IP_MODE_AUTO,
@@ -260,9 +249,74 @@ def _migrate_duckdns_account_providers(
                     CONF_ENABLED: True,
                 }
             )
-        changed = True
+            changed = True
+
+    for prov in providers:
+        ptype = str(prov.get(CONF_PROVIDER_TYPE, ""))
+        cfg = dict(prov.get(CONF_PROVIDER_CONFIG) or {})
+        label = PROVIDER_LABELS.get(ptype, ptype)
+
+        if ptype == PROVIDER_DUCKDNS and CONF_SUBDOMAIN in cfg:
+            subdomain = duckdns_subdomain(str(cfg.get(CONF_SUBDOMAIN) or ""))
+            token = str(cfg.get(CONF_TOKEN) or "").strip()
+            if not token:
+                out_providers.append(prov)
+                continue
+            new_cfg = {CONF_TOKEN: token}
+            pid, _ = upsert_provider(out_providers, provider_type=ptype, name=label, config=new_cfg)
+            if provider_uid(prov) != pid:
+                for rec in records:
+                    if str(rec.get(CONF_PROVIDER_ID)) == provider_uid(prov):
+                        rec[CONF_PROVIDER_ID] = pid
+            _ensure_record(pid, duckdns_hostname(subdomain), subdomain)
+            changed = True
+            continue
+
+        if ptype in (PROVIDER_NOIP, PROVIDER_DYNDNS) and CONF_HOSTNAME in cfg:
+            host = str(cfg.get(CONF_HOSTNAME) or "").strip().lower()
+            user = str(cfg.get(CONF_USERNAME) or "").strip()
+            password = str(cfg.get(CONF_PASSWORD) or "")
+            if not user:
+                out_providers.append(prov)
+                continue
+            new_cfg = {CONF_USERNAME: user, CONF_PASSWORD: password}
+            pid, _ = upsert_provider(
+                out_providers, provider_type=ptype, name=f"{label} — {user}", config=new_cfg
+            )
+            if provider_uid(prov) != pid:
+                for rec in records:
+                    if str(rec.get(CONF_PROVIDER_ID)) == provider_uid(prov):
+                        rec[CONF_PROVIDER_ID] = pid
+            _ensure_record(pid, host, host)
+            changed = True
+            continue
+
+        if ptype == PROVIDER_DYNV6 and CONF_HOSTNAME in cfg:
+            host = str(cfg.get(CONF_HOSTNAME) or "").strip().lower()
+            token = str(cfg.get(CONF_TOKEN) or "").strip()
+            if not token:
+                out_providers.append(prov)
+                continue
+            new_cfg = {CONF_TOKEN: token}
+            pid, _ = upsert_provider(out_providers, provider_type=ptype, name=label, config=new_cfg)
+            if provider_uid(prov) != pid:
+                for rec in records:
+                    if str(rec.get(CONF_PROVIDER_ID)) == provider_uid(prov):
+                        rec[CONF_PROVIDER_ID] = pid
+            _ensure_record(pid, host, host)
+            changed = True
+            continue
+
+        out_providers.append(prov)
 
     return out_providers, records + extra_records, changed
+
+
+def _migrate_duckdns_account_providers(
+    providers: list[dict[str, Any]], records: list[dict[str, Any]]
+) -> tuple[list[dict[str, Any]], list[dict[str, Any]], bool]:
+    """Backward-compatible alias."""
+    return _migrate_account_providers(providers, records)
 
 
 def migrate_options(entry: ConfigEntry) -> tuple[list[dict[str, Any]], list[dict[str, Any]], bool]:
@@ -337,7 +391,7 @@ def migrate_options(entry: ConfigEntry) -> tuple[list[dict[str, Any]], list[dict
             }
             changed = True
 
-        # DuckDNS inline: strip subdomain into record, keep token on provider
+        # Account DDNS inline: peel hostname/subdomain into the record
         if ptype == PROVIDER_DUCKDNS and cfg.get(CONF_SUBDOMAIN):
             sub = duckdns_subdomain(str(cfg[CONF_SUBDOMAIN]))
             token = str(cfg.get(CONF_TOKEN) or "").strip()
@@ -346,6 +400,24 @@ def migrate_options(entry: ConfigEntry) -> tuple[list[dict[str, Any]], list[dict
                 out[CONF_RECORD_NAME] = duckdns_hostname(sub)
             if sub and not out.get(CONF_RECORD_ID):
                 out[CONF_RECORD_ID] = sub
+        elif ptype in (PROVIDER_NOIP, PROVIDER_DYNDNS) and cfg.get(CONF_HOSTNAME):
+            host = str(cfg[CONF_HOSTNAME]).strip().lower()
+            cfg = {
+                CONF_USERNAME: str(cfg.get(CONF_USERNAME) or "").strip(),
+                CONF_PASSWORD: str(cfg.get(CONF_PASSWORD) or ""),
+            }
+            if host and not out.get(CONF_RECORD_NAME):
+                out[CONF_RECORD_NAME] = host
+            if host and not out.get(CONF_RECORD_ID):
+                out[CONF_RECORD_ID] = host
+        elif ptype == PROVIDER_DYNV6 and cfg.get(CONF_HOSTNAME):
+            host = str(cfg[CONF_HOSTNAME]).strip().lower()
+            token = str(cfg.get(CONF_TOKEN) or "").strip()
+            cfg = {CONF_TOKEN: token} if token else cfg
+            if host and not out.get(CONF_RECORD_NAME):
+                out[CONF_RECORD_NAME] = host
+            if host and not out.get(CONF_RECORD_ID):
+                out[CONF_RECORD_ID] = host
 
         fp = _config_fingerprint(ptype, cfg)
         if fp not in by_fp:
@@ -367,8 +439,8 @@ def migrate_options(entry: ConfigEntry) -> tuple[list[dict[str, Any]], list[dict
         changed = True
         new_records.append(out)
 
-    providers, new_records, duck_changed = _migrate_duckdns_account_providers(providers, new_records)
-    changed = changed or duck_changed
+    providers, new_records, acct_changed = _migrate_account_providers(providers, new_records)
+    changed = changed or acct_changed
 
     for rec in new_records:
         if _ensure_record_ip_defaults(rec):
@@ -389,8 +461,10 @@ def _default_provider_name(provider_type: str, config: dict[str, Any]) -> str:
     type_label = PROVIDER_LABELS.get(provider_type, provider_type)
     if provider_type == PROVIDER_CLOUDFLARE and config.get(CONF_ZONE_NAME):
         return f"{type_label} — {config[CONF_ZONE_NAME]}"
-    if provider_type == PROVIDER_DUCKDNS:
+    if provider_type in (PROVIDER_DUCKDNS, PROVIDER_DYNV6):
         return type_label
+    if provider_type in (PROVIDER_NOIP, PROVIDER_DYNDNS) and config.get(CONF_USERNAME):
+        return f"{type_label} — {config[CONF_USERNAME]}"
     if config.get(CONF_HOSTNAME):
         return f"{type_label} — {config[CONF_HOSTNAME]}"
     return type_label
@@ -454,11 +528,10 @@ def resolve_provider_bundle(rec: dict[str, Any], entry: ConfigEntry) -> tuple[st
 
 
 def ddns_hostname_from_provider(prov: dict[str, Any]) -> str | None:
-    """Hostname implied by a single-host DDNS provider (not DuckDNS account)."""
+    """Hostname implied by a legacy single-host DDNS provider (pre-account model)."""
     ptype = str(prov.get(CONF_PROVIDER_TYPE, ""))
     cfg = prov.get(CONF_PROVIDER_CONFIG) or {}
     if ptype == PROVIDER_DUCKDNS:
-        # Account-level: hostname comes from the record, not the provider
         if cfg.get(CONF_SUBDOMAIN):
             return duckdns_hostname(str(cfg[CONF_SUBDOMAIN]))
         return None

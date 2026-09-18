@@ -130,27 +130,33 @@
       },
       "add_provider_hostname_auth": {
         "title": "Add provider — {provider}",
-        "description": "Step 2 of 2: {provider} account for a single hostname.",
+        "description": "Step 2 of 2: {provider} account or DDNS key credentials. Hostnames are chosen when adding records. Optionally enter one hostname to verify now.",
         "sections": {
           "account": {
             "name": "Account",
             "data": {
-              "hostname": "Hostname (FQDN)",
               "username": "Username",
-              "password": "Password"
+              "password": "Password",
+              "hostname": "Verify with hostname (optional)"
+            },
+            "data_description": {
+              "hostname": "FQDN used only to validate credentials; not stored on the provider."
             }
           }
         }
       },
       "add_provider_dynv6": {
         "title": "Add provider — dynv6",
-        "description": "Step 2 of 2: dynv6 zone and HTTP token.",
+        "description": "Step 2 of 2: HTTP token (shared by all zones). Optionally enter one hostname to verify the token now.",
         "sections": {
           "dynv6": {
             "name": "Account",
             "data": {
-              "hostname": "Hostname (FQDN)",
-              "token": "Token"
+              "token": "HTTP token",
+              "hostname": "Verify with hostname (optional)"
+            },
+            "data_description": {
+              "hostname": "FQDN used only to validate the token; zones are chosen when adding records."
             }
           }
         }
@@ -199,6 +205,18 @@
             "name": "Subdomain",
             "data": {
               "subdomain": "Subdomain (without .duckdns.org)"
+            }
+          }
+        }
+      },
+      "add_record_hostname": {
+        "title": "Add record — Hostname",
+        "description": "Step 2: enter the FQDN to manage with {provider}.",
+        "sections": {
+          "hostname": {
+            "name": "Hostname",
+            "data": {
+              "hostname": "Hostname (FQDN)"
             }
           }
         }

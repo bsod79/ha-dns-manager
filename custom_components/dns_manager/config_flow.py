@@ -420,33 +420,27 @@ class DnsManagerOptionsFlow(config_entries.OptionsFlow):
     ) -> FlowResult:
         errors: dict[str, str] = {}
         provider_type = str(self._adding_provider_type)
+        label = PROVIDER_LABELS.get(provider_type, provider_type)
         if user_input is not None:
             try:
                 data = _from_section(user_input, "account")
-                hostname = str(data[CONF_HOSTNAME]).strip().lower()
                 username = str(data[CONF_USERNAME]).strip()
                 password = str(data[CONF_PASSWORD])
+                verify_host = str(data.get(CONF_HOSTNAME) or "").strip().lower()
                 provider = get_provider(
                     ProviderConfig(
                         provider_type=provider_type,
-                        credentials={
-                            CONF_HOSTNAME: hostname,
-                            CONF_USERNAME: username,
-                            CONF_PASSWORD: password,
-                        },
+                        credentials={CONF_USERNAME: username, CONF_PASSWORD: password},
                     )
                 )
                 await provider.validate_credentials()
-                label = PROVIDER_LABELS.get(provider_type, provider_type)
+                if verify_host and hasattr(provider, "validate_with_hostname"):
+                    await provider.validate_with_hostname(verify_host)
                 upsert_provider(
                     self._providers,
                     provider_type=provider_type,
-                    name=f"{label} — {hostname}",
-                    config={
-                        CONF_HOSTNAME: hostname,
-                        CONF_USERNAME: username,
-                        CONF_PASSWORD: password,
-                    },
+                    name=f"{label} — {username}",
+                    config={CONF_USERNAME: username, CONF_PASSWORD: password},
                 )
                 return self._save()
             except ProviderAuthError:
@@ -461,13 +455,13 @@ class DnsManagerOptionsFlow(config_entries.OptionsFlow):
             data_schema=_sectioned(
                 "account",
                 {
-                    vol.Required(CONF_HOSTNAME): str,
                     vol.Required(CONF_USERNAME): str,
                     vol.Required(CONF_PASSWORD): str,
+                    vol.Optional(CONF_HOSTNAME): str,
                 },
             ),
             errors=errors,
-            description_placeholders={"provider": PROVIDER_LABELS.get(provider_type, provider_type)},
+            description_placeholders={"provider": label},
         )
 
     async def async_step_add_provider_dynv6(self, user_input: dict[str, Any] | None = None) -> FlowResult:
@@ -475,20 +469,22 @@ class DnsManagerOptionsFlow(config_entries.OptionsFlow):
         if user_input is not None:
             try:
                 data = _from_section(user_input, "dynv6")
-                hostname = str(data[CONF_HOSTNAME]).strip().lower()
                 token = str(data[CONF_TOKEN]).strip()
+                verify_host = str(data.get(CONF_HOSTNAME) or "").strip().lower()
                 provider = get_provider(
                     ProviderConfig(
                         provider_type=PROVIDER_DYNV6,
-                        credentials={CONF_HOSTNAME: hostname, CONF_TOKEN: token},
+                        credentials={CONF_TOKEN: token},
                     )
                 )
                 await provider.validate_credentials()
+                if verify_host and hasattr(provider, "validate_with_hostname"):
+                    await provider.validate_with_hostname(verify_host)
                 upsert_provider(
                     self._providers,
                     provider_type=PROVIDER_DYNV6,
-                    name=f"dynv6 — {hostname}",
-                    config={CONF_HOSTNAME: hostname, CONF_TOKEN: token},
+                    name="dynv6",
+                    config={CONF_TOKEN: token},
                 )
                 return self._save()
             except ProviderAuthError:
@@ -503,8 +499,8 @@ class DnsManagerOptionsFlow(config_entries.OptionsFlow):
             data_schema=_sectioned(
                 "dynv6",
                 {
-                    vol.Required(CONF_HOSTNAME): str,
                     vol.Required(CONF_TOKEN): str,
+                    vol.Optional(CONF_HOSTNAME): str,
                 },
             ),
             errors=errors,
@@ -546,8 +542,10 @@ class DnsManagerOptionsFlow(config_entries.OptionsFlow):
             ptype = str(prov[CONF_PROVIDER_TYPE])
             if is_zone_provider(ptype):
                 return await self.async_step_add_record_cloudflare_select()
-            if is_account_provider(ptype):
+            if ptype == PROVIDER_DUCKDNS:
                 return await self.async_step_add_record_duckdns_subdomain()
+            if is_account_provider(ptype):
+                return await self.async_step_add_record_hostname()
             hostname = ddns_hostname_from_provider(prov)
             if not hostname:
                 return self.async_abort(reason="no_providers")
@@ -613,6 +611,54 @@ class DnsManagerOptionsFlow(config_entries.OptionsFlow):
             ),
             errors=errors,
             description_placeholders={"provider": self._selected_provider_label()},
+        )
+
+    async def async_step_add_record_hostname(
+        self, user_input: dict[str, Any] | None = None
+    ) -> FlowResult:
+        """Add a hostname for No-IP / DynDNS / dynv6 account providers."""
+        errors: dict[str, str] = {}
+        prov = find_provider_in_list(self._providers, str(self._selected_provider_id))
+        if prov is None:
+            return self.async_abort(reason="no_providers")
+        ptype = str(prov[CONF_PROVIDER_TYPE])
+        label = PROVIDER_LABELS.get(ptype, ptype)
+
+        if user_input is not None:
+            try:
+                data = _from_section(user_input, "hostname")
+                host = str(data[CONF_HOSTNAME]).strip().lower()
+                if not host:
+                    raise ValueError("empty")
+                if self._record_already_managed(host, str(self._selected_provider_id)):
+                    errors["base"] = "record_already_managed"
+                else:
+                    cfg = dict(prov.get(CONF_PROVIDER_CONFIG) or {})
+                    client = get_provider(ProviderConfig(provider_type=ptype, credentials=cfg))
+                    if hasattr(client, "validate_with_hostname"):
+                        await client.validate_with_hostname(host)
+                    self._adding_record_id = host
+                    self._adding_record_id_aaaa = ""
+                    self._adding_record_name = host
+                    self._adding_record_type = "A"
+                    return await self.async_step_add_record_ip_mode()
+            except ProviderAuthError:
+                errors["base"] = "invalid_auth"
+            except ProviderAPIError:
+                errors["base"] = "cannot_connect"
+            except Exception:  # noqa: BLE001
+                errors["base"] = "invalid_ip"
+
+        return self.async_show_form(
+            step_id="add_record_hostname",
+            data_schema=_sectioned(
+                "hostname",
+                {vol.Required(CONF_HOSTNAME): str},
+            ),
+            errors=errors,
+            description_placeholders={
+                "provider": self._selected_provider_label() or label,
+            },
         )
 
     async def async_step_add_record_cloudflare_select(

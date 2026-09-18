@@ -4,12 +4,17 @@ Home Assistant custom integration to manage DNS records across multiple provider
 
 ## Model
 
-1. **Providers** (saved once) — Cloudflare zone, DuckDNS account token, No-IP, DynDNS, dynv6  
-2. **Managed records** — pick a saved provider, then choose IPv4/IPv6 strategy  
+1. **Providers** (saved once) — Cloudflare zone, DuckDNS token, No-IP/DynDNS credentials (or DDNS key), dynv6 HTTP token  
+2. **Managed records** — pick a saved provider, then choose hostname/subdomain and IPv4/IPv6 strategy  
 
 Each record can use a different provider. Credentials are not re-entered when adding records.
 
-**DuckDNS:** one provider = one account token. Each managed record is a subdomain under that token.
+| Provider | Account stores | Per record |
+|----------|----------------|------------|
+| Cloudflare | Zone + API credentials | DNS A/AAAA name |
+| DuckDNS | Token | Subdomain |
+| No-IP / DynDNS | Username + password (DDNS key OK) | Hostname FQDN |
+| dynv6 | HTTP token | Zone/hostname FQDN |
 
 ## IP strategy (per record, per family)
 

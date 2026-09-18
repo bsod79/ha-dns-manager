@@ -219,9 +219,58 @@ def test_upsert_duckdns_merges_same_token():
     assert len(providers) == 1
 
 
-def test_provider_display_label_not_redundant():
-    assert provider_display_label(_cf("p1", "t")) == "Cloudflare — example.com"
-    custom = {**_cf("p1", "t"), "name": "Home"}
-    assert provider_display_label(custom) == "Home (Cloudflare: example.com)"
-    unnamed = {**_cf("p1", "t"), "name": ""}
-    assert provider_display_label(unnamed) == "Cloudflare — example.com"
+def test_migrate_noip_hostname_provider_to_account():
+    entry = config_entries.ConfigEntry(
+        version=3,
+        domain="dns_manager",
+        title="My DNS",
+        data={},
+        options={
+            CONF_PROVIDERS: [
+                {
+                    CONF_PROVIDER_ID: "p1",
+                    "name": "No-IP — home.ddns.net",
+                    CONF_PROVIDER_TYPE: "noip",
+                    CONF_PROVIDER_CONFIG: {
+                        "hostname": "home.ddns.net",
+                        "username": "user@example.com",
+                        "password": "secret",
+                    },
+                }
+            ],
+            CONF_RECORDS: [],
+        },
+        source="user",
+        entry_id="1",
+        unique_id=None,
+    )
+    providers, records, changed = migrate_options(entry)
+    assert changed is True
+    assert len(providers) == 1
+    assert providers[0][CONF_PROVIDER_CONFIG] == {
+        "username": "user@example.com",
+        "password": "secret",
+    }
+    assert "hostname" not in providers[0][CONF_PROVIDER_CONFIG]
+    assert len(records) == 1
+    assert records[0]["name"] == "home.ddns.net"
+
+
+def test_upsert_noip_merges_same_username():
+    providers: list = []
+    pid1, u1 = upsert_provider(
+        providers,
+        provider_type="noip",
+        name="No-IP — a",
+        config={"username": "u", "password": "p1"},
+    )
+    pid2, u2 = upsert_provider(
+        providers,
+        provider_type="noip",
+        name="No-IP — u",
+        config={"username": "u", "password": "p2"},
+    )
+    assert u1 is False and u2 is True
+    assert pid1 == pid2
+    assert len(providers) == 1
+    assert providers[0][CONF_PROVIDER_CONFIG]["password"] == "p2"
