@@ -22,13 +22,18 @@ from .const import (
     CONF_RECORD_NAME,
     CONF_RECORDS,
     CONF_SCAN_INTERVAL,
+    CONF_WRITE_COOLDOWN,
     DEFAULT_AUTO_SYNC,
     DEFAULT_IP_DETECTION_URL,
     DEFAULT_IPV6_DETECTION_URL,
     DEFAULT_SCAN_INTERVAL,
+    DEFAULT_WRITE_COOLDOWN,
+    EVENT_RECORD_OUT_OF_SYNC,
+    TRIGGER_AUTO,
 )
 from .exceptions import DNSManagerError, IPDetectionError, ProviderAuthError
 from .expected_ip import resolve_expected_addresses
+from .options_model import is_ipv6_enabled
 from .providers import get_provider_for_record
 from .providers.record_context import (
     normalize_record,
@@ -82,6 +87,9 @@ class DnsManagerCoordinator(DataUpdateCoordinator[CoordinatorData]):
     ) -> None:
         self.entry = entry
         self.activity_log = activity_log
+        # Edge detection for out_of_sync events (avoid firing every poll)
+        self._prev_in_sync: dict[str, bool] = {}
+        self._last_write_at: dict[str, datetime] = {}
 
         scan = int(entry.options.get(CONF_SCAN_INTERVAL, DEFAULT_SCAN_INTERVAL))
         super().__init__(
@@ -97,11 +105,50 @@ class DnsManagerCoordinator(DataUpdateCoordinator[CoordinatorData]):
             for r in self.entry.options.get(CONF_RECORDS, [])
         ]
 
+    def can_auto_write(self, record_uid_key: str) -> bool:
+        cooldown = int(self.entry.options.get(CONF_WRITE_COOLDOWN, DEFAULT_WRITE_COOLDOWN))
+        if cooldown <= 0:
+            return True
+        last = self._last_write_at.get(record_uid_key)
+        if last is None:
+            return True
+        return datetime.now(timezone.utc) - last >= timedelta(seconds=cooldown)
+
+    def mark_write(self, record_uid_key: str) -> None:
+        self._last_write_at[record_uid_key] = datetime.now(timezone.utc)
+
+    def _fire_out_of_sync_edges(self, records: dict[str, RecordStatus]) -> None:
+        for uid, rs in records.items():
+            prev = self._prev_in_sync.get(uid)
+            # Fire on first out-of-sync sighting or in_sync → out_of_sync
+            if not rs.in_sync and prev is not False:
+                self.hass.bus.async_fire(
+                    EVENT_RECORD_OUT_OF_SYNC,
+                    {
+                        "config_entry_id": self.entry.entry_id,
+                        "record_uid": uid,
+                        "record_name": rs.name,
+                        "expected_ipv4": rs.expected_ip,
+                        "current_ipv4": rs.current_ip,
+                        "expected_ipv6": rs.expected_ipv6,
+                        "current_ipv6": rs.current_ipv6,
+                    },
+                )
+            self._prev_in_sync[uid] = rs.in_sync
+        stale = [k for k in self._prev_in_sync if k not in records]
+        for k in stale:
+            del self._prev_in_sync[k]
+
     async def _async_update_data(self) -> CoordinatorData:
         ip_url = self.entry.options.get(CONF_IP_DETECTION_URL, DEFAULT_IP_DETECTION_URL)
-        ipv6_url = str(
-            self.entry.options.get(CONF_IPV6_DETECTION_URL, DEFAULT_IPV6_DETECTION_URL) or ""
-        ).strip()
+        ipv6_on = is_ipv6_enabled(self.entry)
+        ipv6_url = (
+            str(
+                self.entry.options.get(CONF_IPV6_DETECTION_URL, DEFAULT_IPV6_DETECTION_URL) or ""
+            ).strip()
+            if ipv6_on
+            else ""
+        )
         session = async_get_clientsession(self.hass)
         public_ip = ""
         public_ipv6 = ""
@@ -139,6 +186,8 @@ class DnsManagerCoordinator(DataUpdateCoordinator[CoordinatorData]):
                     rec_cfg,
                     public_ipv4=public_ip,
                     public_ipv6=public_ipv6,
+                    hass=self.hass,
+                    ipv6_enabled=ipv6_on,
                 )
                 expected_v4 = expected.ipv4
                 expected_v6 = expected.ipv6
@@ -218,6 +267,7 @@ class DnsManagerCoordinator(DataUpdateCoordinator[CoordinatorData]):
             records=records_out,
             last_checked=now,
         )
+        self._fire_out_of_sync_edges(records_out)
         await self._async_auto_sync_records(data)
 
         out_of_sync = [rs.name for rs in data.records.values() if not rs.in_sync]
@@ -245,8 +295,9 @@ class DnsManagerCoordinator(DataUpdateCoordinator[CoordinatorData]):
         if not self.entry.options.get(CONF_AUTO_SYNC, DEFAULT_AUTO_SYNC):
             return
 
-        now = datetime.now(timezone.utc)
-        session = async_get_clientsession(self.hass)
+        # Import late to avoid circular import with services
+        from .services import async_update_record_by_uid
+
         for rec_cfg in self._managed_records():
             if rec_cfg.get(CONF_ENABLED, True) is not True:
                 continue
@@ -254,58 +305,27 @@ class DnsManagerCoordinator(DataUpdateCoordinator[CoordinatorData]):
             rs = data.records.get(uid)
             if rs is None or rs.in_sync:
                 continue
-            try:
-                expected = await resolve_expected_addresses(
-                    session,
-                    rec_cfg,
-                    public_ipv4=data.public_ip,
-                    public_ipv6=data.public_ipv6,
-                )
-                if expected.ipv4 is None and expected.ipv6 is None:
-                    continue
-                if (expected.ipv4 is not None and not expected.ipv4) and (
-                    expected.ipv6 is not None and not expected.ipv6
-                ):
-                    continue
-
-                provider = get_provider_for_record(rec_cfg, self.entry)
-                zone_id = zone_id_for_record(rec_cfg, self.entry)
-                record_name = str(rec_cfg.get(CONF_RECORD_NAME, uid))
-                updated = await provider.update_addresses(
-                    zone_id,
-                    name=record_name,
-                    record_id=provider_record_id(rec_cfg),
-                    record_id_aaaa=provider_record_id_aaaa(rec_cfg),
-                    ipv4=expected.ipv4 if expected.ipv4 else None,
-                    ipv6=expected.ipv6 if expected.ipv6 else None,
-                )
+            wrote = await async_update_record_by_uid(
+                coord=self,
+                uid=uid,
+                trigger=TRIGGER_AUTO,
+                respect_cooldown=True,
+            )
+            if wrote and uid in data.records:
+                now = datetime.now(timezone.utc)
+                prev = data.records[uid]
                 data.records[uid] = RecordStatus(
-                    record_id=uid,
-                    name=rs.name,
-                    current_ip=updated.ipv4 or (expected.ipv4 or rs.current_ip),
-                    expected_ip=expected.ipv4 or "",
-                    current_ipv6=updated.ipv6 or (expected.ipv6 or rs.current_ipv6),
-                    expected_ipv6=expected.ipv6 or "",
+                    record_id=prev.record_id,
+                    name=prev.name,
+                    current_ip=prev.expected_ip or prev.current_ip,
+                    expected_ip=prev.expected_ip,
+                    current_ipv6=prev.expected_ipv6 or prev.current_ipv6,
+                    expected_ipv6=prev.expected_ipv6,
                     in_sync=True,
                     last_updated=now,
-                    provider_type=rs.provider_type,
+                    provider_type=prev.provider_type,
                 )
-                self.activity_log.info(
-                    "Auto-sync updated DNS record",
-                    record_uid=uid,
-                    name=rs.name,
-                    ipv4=expected.ipv4,
-                    ipv6=expected.ipv6,
-                    provider=rs.provider_type,
-                )
-            except DNSManagerError as err:
-                self.activity_log.error(
-                    "Auto-sync failed",
-                    record_uid=uid,
-                    name=rs.name,
-                    provider=rs.provider_type,
-                    error=str(err),
-                )
+                self._prev_in_sync[uid] = True
 
     def set_last_updated(self, record_uid_key: str) -> None:
         if not self.data or record_uid_key not in self.data.records:

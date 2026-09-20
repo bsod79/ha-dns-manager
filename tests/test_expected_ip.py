@@ -5,15 +5,19 @@ from unittest.mock import AsyncMock, MagicMock, patch
 import pytest
 
 from custom_components.dns_manager.const import (
+    CONF_IP_ENTITY,
     CONF_IP_MODE,
     CONF_IP_URL,
+    CONF_IPV6_MODE,
     CONF_STATIC_IP,
+    CONF_STATIC_IPV6,
     IP_MODE_AUTO,
+    IP_MODE_ENTITY,
     IP_MODE_STATIC,
     IP_MODE_URL,
 )
 from custom_components.dns_manager.exceptions import IPDetectionError
-from custom_components.dns_manager.expected_ip import resolve_expected_ip
+from custom_components.dns_manager.expected_ip import resolve_expected_addresses, resolve_expected_ip
 from custom_components.dns_manager.utils.ip_detection import detect_ip_from_url
 
 
@@ -93,3 +97,57 @@ async def test_detect_ip_from_url_invalid():
 
     with pytest.raises(IPDetectionError):
         await detect_ip_from_url(session, "https://example.com/ip")
+
+
+@pytest.mark.asyncio
+async def test_resolve_expected_ip_from_entity():
+    session = MagicMock()
+    hass = MagicMock()
+    state = MagicMock()
+    state.state = "203.0.113.10"
+    hass.states.get = MagicMock(return_value=state)
+
+    ip = await resolve_expected_ip(
+        session,
+        {CONF_IP_MODE: IP_MODE_ENTITY, CONF_IP_ENTITY: "sensor.wan_ip"},
+        public_ip="8.8.8.8",
+        hass=hass,
+    )
+    assert ip == "203.0.113.10"
+    hass.states.get.assert_called_once_with("sensor.wan_ip")
+
+
+@pytest.mark.asyncio
+async def test_resolve_expected_ip_from_entity_unavailable():
+    session = MagicMock()
+    hass = MagicMock()
+    state = MagicMock()
+    state.state = "unavailable"
+    hass.states.get = MagicMock(return_value=state)
+
+    result = await resolve_expected_addresses(
+        session,
+        {CONF_IP_MODE: IP_MODE_ENTITY, CONF_IP_ENTITY: "sensor.wan_ip"},
+        public_ipv4="8.8.8.8",
+        public_ipv6="",
+        hass=hass,
+    )
+    assert result.ipv4 == ""
+
+
+@pytest.mark.asyncio
+async def test_resolve_expected_addresses_ipv6_globally_disabled():
+    session = MagicMock()
+    result = await resolve_expected_addresses(
+        session,
+        {
+            CONF_IP_MODE: IP_MODE_AUTO,
+            CONF_IPV6_MODE: IP_MODE_STATIC,
+            CONF_STATIC_IPV6: "2001:db8::1",
+        },
+        public_ipv4="8.8.8.8",
+        public_ipv6="2001:db8::99",
+        ipv6_enabled=False,
+    )
+    assert result.ipv4 == "8.8.8.8"
+    assert result.ipv6 is None

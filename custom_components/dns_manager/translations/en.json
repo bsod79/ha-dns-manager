@@ -42,14 +42,20 @@
             "data": {
               "scan_interval": "Polling interval (seconds)",
               "ip_detection_url": "Default public IPv4 URL",
-              "ipv6_detection_url": "Default public IPv6 URL (optional)",
-              "auto_sync": "Automatically update DNS when out of sync"
+              "ipv6_enabled": "Enable IPv6",
+              "ipv6_detection_url": "Default public IPv6 URL",
+              "auto_sync": "Automatically update DNS when out of sync",
+              "sync_on_start": "Update all records when Home Assistant starts",
+              "write_cooldown": "Write cooldown (seconds)"
             },
             "data_description": {
               "scan_interval": "How often to check status (default 300 s).",
               "ip_detection_url": "Used by records with Auto IPv4 strategy.",
-              "ipv6_detection_url": "Leave empty to disable Auto IPv6. Example: https://api6.ipify.org?format=json",
-              "auto_sync": "When enabled, each poll writes DNS for out-of-sync records."
+              "ipv6_enabled": "When off, IPv6 options are hidden when adding/editing records and IPv6 is not detected or updated.",
+              "ipv6_detection_url": "Used by records with Auto IPv6 when IPv6 is enabled. Example: https://api6.ipify.org?format=json",
+              "auto_sync": "When enabled, each poll writes DNS for out-of-sync records.",
+              "sync_on_start": "Opt-in. Respects write cooldown; manual Update buttons ignore cooldown.",
+              "write_cooldown": "Minimum seconds between automatic writes per record (auto_sync / sync on start)."
             }
           }
         }
@@ -232,8 +238,8 @@
               "ipv6_mode": "IPv6 (AAAA record)"
             },
             "data_description": {
-              "ip_mode": "Auto uses the instance public IPv4; From URL / Static as configured. Off skips IPv4.",
-              "ipv6_mode": "Requires a public IPv6 URL in General settings for Auto. Off skips IPv6."
+              "ip_mode": "Auto uses the instance public IPv4; From URL / Static / From entity as configured. Off skips IPv4.",
+              "ipv6_mode": "Requires a public IPv6 URL in General settings for Auto. From entity reads an entity state. Off skips IPv6."
             }
           }
         }
@@ -247,12 +253,16 @@
             "data": {
               "static_ip": "Static IPv4",
               "ip_url": "IPv4 detection URL",
+              "ip_entity": "IPv4 source entity",
               "static_ipv6": "Static IPv6",
-              "ipv6_url": "IPv6 detection URL"
+              "ipv6_url": "IPv6 detection URL",
+              "ipv6_entity": "IPv6 source entity"
             },
             "data_description": {
               "ip_url": "Plain text or JSON with an ip field.",
-              "ipv6_url": "Plain text or JSON with an ip field."
+              "ip_entity": "Entity whose state is an IPv4 address (sensor, input_text, or text).",
+              "ipv6_url": "Plain text or JSON with an ip field.",
+              "ipv6_entity": "Entity whose state is an IPv6 address (sensor, input_text, or text)."
             }
           }
         }
@@ -281,8 +291,8 @@
               "enabled": "Enabled"
             },
             "data_description": {
-              "ip_mode": "Auto uses the instance public IPv4; From URL / Static as configured. Off skips IPv4.",
-              "ipv6_mode": "Requires a public IPv6 URL in General settings for Auto. Off skips IPv6.",
+              "ip_mode": "Auto uses the instance public IPv4; From URL / Static / From entity as configured. Off skips IPv4.",
+              "ipv6_mode": "Requires a public IPv6 URL in General settings for Auto. From entity reads an entity state. Off skips IPv6.",
               "enabled": "Disabled records are monitored but never updated."
             }
           }
@@ -297,12 +307,16 @@
             "data": {
               "static_ip": "Static IPv4",
               "ip_url": "IPv4 detection URL",
+              "ip_entity": "IPv4 source entity",
               "static_ipv6": "Static IPv6",
-              "ipv6_url": "IPv6 detection URL"
+              "ipv6_url": "IPv6 detection URL",
+              "ipv6_entity": "IPv6 source entity"
             },
             "data_description": {
               "ip_url": "Plain text or JSON with an ip field.",
-              "ipv6_url": "Plain text or JSON with an ip field."
+              "ip_entity": "Entity whose state is an IPv4 address (sensor, input_text, or text).",
+              "ipv6_url": "Plain text or JSON with an ip field.",
+              "ipv6_entity": "Entity whose state is an IPv6 address (sensor, input_text, or text)."
             }
           }
         }
@@ -341,6 +355,11 @@
           "not_ready": "Out of sync",
           "unknown": "Unknown"
         }
+      }
+    },
+    "binary_sensor": {
+      "problem": {
+        "name": "Problem"
       }
     }
   }

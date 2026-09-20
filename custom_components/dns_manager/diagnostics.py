@@ -15,12 +15,16 @@ from .const import (
     CONF_AUTO_SYNC,
     CONF_CREDENTIALS,
     CONF_IP_DETECTION_URL,
+    CONF_IPV6_DETECTION_URL,
+    CONF_IPV6_ENABLED,
     CONF_PASSWORD,
     CONF_PROVIDER_CONFIG,
     CONF_PROVIDERS,
     CONF_RECORDS,
     CONF_SCAN_INTERVAL,
+    CONF_SYNC_ON_START,
     CONF_TOKEN,
+    CONF_WRITE_COOLDOWN,
     DOMAIN,
 )
 from .coordinator import DnsManagerCoordinator
@@ -52,6 +56,8 @@ async def async_get_config_entry_diagnostics(hass: HomeAssistant, entry: ConfigE
         "last_exception": str(coordinator.last_exception) if coordinator.last_exception else None,
         "update_interval_seconds": int(entry.options.get(CONF_SCAN_INTERVAL, 300)),
         "auto_sync_enabled": bool(entry.options.get(CONF_AUTO_SYNC, False)),
+        "sync_on_start": bool(entry.options.get(CONF_SYNC_ON_START, False)),
+        "write_cooldown": int(entry.options.get(CONF_WRITE_COOLDOWN, 300)),
     }
 
     if coordinator.data:
@@ -80,8 +86,11 @@ async def async_get_config_entry_diagnostics(hass: HomeAssistant, entry: ConfigE
         "options": {
             CONF_SCAN_INTERVAL: entry.options.get(CONF_SCAN_INTERVAL),
             CONF_IP_DETECTION_URL: entry.options.get(CONF_IP_DETECTION_URL),
-            "ipv6_detection_url": entry.options.get("ipv6_detection_url"),
+            CONF_IPV6_ENABLED: entry.options.get(CONF_IPV6_ENABLED, False),
+            CONF_IPV6_DETECTION_URL: entry.options.get(CONF_IPV6_DETECTION_URL),
             CONF_AUTO_SYNC: entry.options.get(CONF_AUTO_SYNC, False),
+            CONF_SYNC_ON_START: entry.options.get(CONF_SYNC_ON_START, False),
+            CONF_WRITE_COOLDOWN: entry.options.get(CONF_WRITE_COOLDOWN, 300),
             "provider_count": len(entry.options.get(CONF_PROVIDERS, [])),
             "managed_record_count": len(entry.options.get(CONF_RECORDS, [])),
             CONF_PROVIDERS: async_redact_data(entry.options.get(CONF_PROVIDERS, []), REDACT_KEYS),
@@ -91,6 +100,7 @@ async def async_get_config_entry_diagnostics(hass: HomeAssistant, entry: ConfigE
         "activity_log": activity_log.as_list(),
         "note": (
             "Polling checks sync every scan_interval seconds. "
-            "DNS is updated only when auto_sync is enabled or you use Update buttons/services."
+            "DNS is updated when auto_sync / sync_on_start is enabled or via Update buttons/services. "
+            "write_cooldown applies to automatic writes only."
         ),
     }

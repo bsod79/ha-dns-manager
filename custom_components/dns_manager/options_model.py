@@ -16,6 +16,7 @@ from .const import (
     CONF_IP_DETECTION_URL,
     CONF_IP_MODE,
     CONF_IPV6_DETECTION_URL,
+    CONF_IPV6_ENABLED,
     CONF_IPV6_MODE,
     CONF_PASSWORD,
     CONF_PROVIDER_CONFIG,
@@ -30,14 +31,19 @@ from .const import (
     CONF_RECORDS,
     CONF_SCAN_INTERVAL,
     CONF_SUBDOMAIN,
+    CONF_SYNC_ON_START,
     CONF_TOKEN,
     CONF_USERNAME,
+    CONF_WRITE_COOLDOWN,
     CONF_ZONE_ID,
     CONF_ZONE_NAME,
     DEFAULT_AUTO_SYNC,
     DEFAULT_IP_DETECTION_URL,
     DEFAULT_IPV6_DETECTION_URL,
+    DEFAULT_IPV6_ENABLED,
     DEFAULT_SCAN_INTERVAL,
+    DEFAULT_SYNC_ON_START,
+    DEFAULT_WRITE_COOLDOWN,
     IP_MODE_AUTO,
     IP_MODE_OFF,
     PROVIDER_CLOUDFLARE,
@@ -470,6 +476,25 @@ def _default_provider_name(provider_type: str, config: dict[str, Any]) -> str:
     return type_label
 
 
+def infer_ipv6_enabled(options: dict[str, Any]) -> bool:
+    """Resolve global IPv6 flag; legacy entries infer from URL / record modes."""
+    if CONF_IPV6_ENABLED in options:
+        return bool(options[CONF_IPV6_ENABLED])
+    if str(options.get(CONF_IPV6_DETECTION_URL) or "").strip():
+        return True
+    for rec in options.get(CONF_RECORDS, []) or []:
+        mode = str(rec.get(CONF_IPV6_MODE, IP_MODE_OFF) or IP_MODE_OFF)
+        if mode and mode != IP_MODE_OFF:
+            return True
+    return DEFAULT_IPV6_ENABLED
+
+
+def is_ipv6_enabled(options: dict[str, Any] | ConfigEntry) -> bool:
+    """Whether IPv6 management is enabled for this integration instance."""
+    opts = options.options if isinstance(options, ConfigEntry) else options
+    return infer_ipv6_enabled(opts)
+
+
 def build_options_payload(
     *,
     scan_interval: int,
@@ -478,12 +503,18 @@ def build_options_payload(
     providers: list[dict[str, Any]],
     records: list[dict[str, Any]],
     ipv6_detection_url: str = DEFAULT_IPV6_DETECTION_URL,
+    ipv6_enabled: bool = DEFAULT_IPV6_ENABLED,
+    sync_on_start: bool = DEFAULT_SYNC_ON_START,
+    write_cooldown: int = DEFAULT_WRITE_COOLDOWN,
 ) -> dict[str, Any]:
     return {
         CONF_SCAN_INTERVAL: scan_interval,
         CONF_IP_DETECTION_URL: ip_detection_url,
+        CONF_IPV6_ENABLED: ipv6_enabled,
         CONF_IPV6_DETECTION_URL: ipv6_detection_url,
         CONF_AUTO_SYNC: auto_sync,
+        CONF_SYNC_ON_START: sync_on_start,
+        CONF_WRITE_COOLDOWN: write_cooldown,
         CONF_PROVIDERS: providers,
         CONF_RECORDS: records,
     }
@@ -493,8 +524,11 @@ def default_options() -> dict[str, Any]:
     return build_options_payload(
         scan_interval=DEFAULT_SCAN_INTERVAL,
         ip_detection_url=DEFAULT_IP_DETECTION_URL,
+        ipv6_enabled=DEFAULT_IPV6_ENABLED,
         ipv6_detection_url=DEFAULT_IPV6_DETECTION_URL,
         auto_sync=DEFAULT_AUTO_SYNC,
+        sync_on_start=DEFAULT_SYNC_ON_START,
+        write_cooldown=DEFAULT_WRITE_COOLDOWN,
         providers=[],
         records=[],
     )

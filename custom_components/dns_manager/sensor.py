@@ -9,8 +9,10 @@ from homeassistant.helpers.entity_platform import AddEntitiesCallback
 
 from .const import (
     CONF_ENABLED,
+    CONF_IP_ENTITY,
     CONF_IP_MODE,
     CONF_IP_URL,
+    CONF_IPV6_ENTITY,
     CONF_IPV6_MODE,
     CONF_IPV6_URL,
     CONF_PROVIDER_TYPE,
@@ -27,6 +29,7 @@ from .const import (
 )
 from .coordinator import DnsManagerCoordinator
 from .entity_base import DnsManagerEntity
+from .options_model import is_ipv6_enabled
 from .providers.record_context import normalize_record, record_uid
 
 
@@ -36,10 +39,9 @@ async def async_setup_entry(
     async_add_entities: AddEntitiesCallback,
 ) -> None:
     coordinator: DnsManagerCoordinator = entry.runtime_data.coordinator
-    entities: list[SensorEntity] = [
-        PublicIpSensor(coordinator, entry),
-        PublicIpv6Sensor(coordinator, entry),
-    ]
+    entities: list[SensorEntity] = [PublicIpSensor(coordinator, entry)]
+    if is_ipv6_enabled(entry):
+        entities.append(PublicIpv6Sensor(coordinator, entry))
 
     for rec_cfg in entry.options.get(CONF_RECORDS, []):
         rec = normalize_record(rec_cfg, entry)
@@ -178,10 +180,14 @@ class ManagedRecordStatusSensor(DnsManagerEntity, SensorEntity):
             attrs["ip_url"] = str(row.get(CONF_IP_URL))
         if row and row.get(CONF_STATIC_IP):
             attrs["static_ip"] = str(row.get(CONF_STATIC_IP))
+        if row and row.get(CONF_IP_ENTITY):
+            attrs["ip_entity"] = str(row.get(CONF_IP_ENTITY))
         if row and row.get(CONF_IPV6_URL):
             attrs["ipv6_url"] = str(row.get(CONF_IPV6_URL))
         if row and row.get(CONF_STATIC_IPV6):
             attrs["static_ipv6"] = str(row.get(CONF_STATIC_IPV6))
+        if row and row.get(CONF_IPV6_ENTITY):
+            attrs["ipv6_entity"] = str(row.get(CONF_IPV6_ENTITY))
         if rs.last_updated:
             attrs["last_updated"] = rs.last_updated.isoformat()
         return attrs

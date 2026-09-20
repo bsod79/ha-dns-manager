@@ -1,5 +1,17 @@
 # Changelog
 
+## 0.7.1
+
+- Global **Enable IPv6** switch in General settings. When off, add/edit record hides IPv6 strategy; public IPv6 is not detected and AAAA is not managed.
+- Legacy entries that already use an IPv6 detection URL or a non-off IPv6 record mode keep IPv6 enabled after upgrade.
+
+## 0.7.0
+
+- HA events: `dns_manager.record_out_of_sync` (edge), `dns_manager.record_synced`, `dns_manager.sync_error`.
+- Problem binary sensor when any managed record is out of sync.
+- Optional `sync_on_start` and per-record `write_cooldown` for automatic writes (manual updates bypass cooldown).
+- IP strategy **From entity**: read IPv4/IPv6 from a sensor / input_text / text entity.
+
 ## 0.6.2
 
 - Align No-IP, DynDNS, and dynv6 with the DuckDNS account model: credentials once, hostname chosen per managed record (legacy per-host providers are migrated automatically).

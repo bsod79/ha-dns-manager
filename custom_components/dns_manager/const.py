@@ -4,7 +4,7 @@ from __future__ import annotations
 
 DOMAIN = "dns_manager"
 
-PLATFORMS: list[str] = ["sensor", "button"]
+PLATFORMS: list[str] = ["sensor", "binary_sensor", "button"]
 
 # Provider types
 PROVIDER_CLOUDFLARE = "cloudflare"
@@ -29,8 +29,11 @@ ACCOUNT_BASED_PROVIDERS: frozenset[str] = frozenset(
 
 CONF_SCAN_INTERVAL = "scan_interval"
 CONF_IP_DETECTION_URL = "ip_detection_url"
+CONF_IPV6_ENABLED = "ipv6_enabled"
 CONF_IPV6_DETECTION_URL = "ipv6_detection_url"
 CONF_AUTO_SYNC = "auto_sync"
+CONF_SYNC_ON_START = "sync_on_start"
+CONF_WRITE_COOLDOWN = "write_cooldown"
 CONF_PROVIDERS = "providers"
 CONF_RECORDS = "records"
 
@@ -67,11 +70,13 @@ CONF_RECORD_TYPE = "record_type"
 CONF_IP_MODE = "ip_mode"
 CONF_STATIC_IP = "static_ip"
 CONF_IP_URL = "ip_url"
+CONF_IP_ENTITY = "ip_entity"
 
 # IPv6 strategy
 CONF_IPV6_MODE = "ipv6_mode"
 CONF_STATIC_IPV6 = "static_ipv6"
 CONF_IPV6_URL = "ipv6_url"
+CONF_IPV6_ENTITY = "ipv6_entity"
 
 CONF_ENABLED = "enabled"
 
@@ -79,11 +84,13 @@ IP_MODE_OFF = "off"
 IP_MODE_AUTO = "auto"
 IP_MODE_URL = "url"
 IP_MODE_STATIC = "static"
+IP_MODE_ENTITY = "entity"
 
 IP_MODE_LABELS: dict[str, str] = {
     IP_MODE_AUTO: "Auto (instance public IP)",
     IP_MODE_URL: "From URL",
     IP_MODE_STATIC: "Static",
+    IP_MODE_ENTITY: "From entity",
     IP_MODE_OFF: "Off (do not manage)",
 }
 
@@ -93,13 +100,27 @@ IPV6_MODE_LABELS: dict[str, str] = {
     IP_MODE_AUTO: "Auto (instance public IPv6)",
     IP_MODE_URL: "From URL",
     IP_MODE_STATIC: "Static",
+    IP_MODE_ENTITY: "From entity",
 }
 
 DEFAULT_SCAN_INTERVAL = 300
 DEFAULT_AUTO_SYNC = False
+DEFAULT_SYNC_ON_START = False
+DEFAULT_WRITE_COOLDOWN = 300
 DEFAULT_IP_DETECTION_URL = "https://api.ipify.org?format=json"
-# Empty = IPv6 auto detection disabled until the user sets a URL
+DEFAULT_IPV6_ENABLED = False
+# Used when IPv6 is enabled; empty means Auto IPv6 has no default URL yet
 DEFAULT_IPV6_DETECTION_URL = ""
+
+EVENT_RECORD_OUT_OF_SYNC = "dns_manager.record_out_of_sync"
+EVENT_RECORD_SYNCED = "dns_manager.record_synced"
+EVENT_SYNC_ERROR = "dns_manager.sync_error"
+
+TRIGGER_AUTO = "auto"
+TRIGGER_MANUAL = "manual"
+TRIGGER_STARTUP = "startup"
+
+ENTITY_IP_DOMAINS = ("sensor", "input_text", "text")
 
 # ENUM sensor states for managed record vs expected IP (SensorDeviceClass.ENUM)
 RECORD_STATUS_READY = "ready"

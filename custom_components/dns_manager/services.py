@@ -15,16 +15,22 @@ from .const import (
     ATTR_RECORD_NAME,
     CONF_ENABLED,
     CONF_PROVIDER_TYPE,
-    CONF_RECORDS,
     CONF_RECORD_NAME,
+    CONF_WRITE_COOLDOWN,
+    DEFAULT_WRITE_COOLDOWN,
     DOMAIN,
+    EVENT_RECORD_SYNCED,
+    EVENT_SYNC_ERROR,
     SERVICE_REFRESH_STATUS,
     SERVICE_UPDATE_ALL,
     SERVICE_UPDATE_RECORD,
+    TRIGGER_MANUAL,
+    TRIGGER_STARTUP,
 )
 from .coordinator import DnsManagerCoordinator
 from .exceptions import DNSManagerError
 from .expected_ip import resolve_expected_addresses
+from .options_model import is_ipv6_enabled
 from .providers import get_provider_for_record
 from .providers.record_context import (
     normalize_record,
@@ -106,23 +112,77 @@ async def _async_expected(
         rec_cfg,
         public_ipv4=public_ip,
         public_ipv6=public_ipv6,
+        hass=coord.hass,
         ipv4_override=ipv4_override,
         ipv6_override=ipv6_override,
+        ipv6_enabled=is_ipv6_enabled(coord.entry),
     )
 
 
-async def async_update_all_records(coord: DnsManagerCoordinator) -> None:
+def _fire_synced(
+    coord: DnsManagerCoordinator,
+    *,
+    uid: str,
+    name: str,
+    ipv4: str | None,
+    ipv6: str | None,
+    trigger: str,
+) -> None:
+    coord.hass.bus.async_fire(
+        EVENT_RECORD_SYNCED,
+        {
+            "config_entry_id": coord.entry.entry_id,
+            "record_uid": uid,
+            "record_name": name,
+            "ipv4": ipv4,
+            "ipv6": ipv6,
+            "trigger": trigger,
+        },
+    )
+
+
+def _fire_sync_error(
+    coord: DnsManagerCoordinator,
+    *,
+    uid: str,
+    name: str,
+    error: str,
+    trigger: str,
+) -> None:
+    coord.hass.bus.async_fire(
+        EVENT_SYNC_ERROR,
+        {
+            "config_entry_id": coord.entry.entry_id,
+            "record_uid": uid,
+            "record_name": name,
+            "error": error,
+            "trigger": trigger,
+        },
+    )
+
+
+async def async_update_all_records(
+    coord: DnsManagerCoordinator,
+    *,
+    trigger: str = TRIGGER_MANUAL,
+    respect_cooldown: bool = False,
+) -> None:
     log = coord.entry.runtime_data.activity_log
     try:
-        log.info("Updating all managed DNS records")
+        log.info("Updating all managed DNS records", trigger=trigger)
         for rec_cfg in normalize_records(coord):
             if rec_cfg.get(CONF_ENABLED, True) is not True:
                 continue
-            await async_update_record_by_uid(coord, record_uid(rec_cfg))
+            await async_update_record_by_uid(
+                coord,
+                record_uid(rec_cfg),
+                trigger=trigger,
+                respect_cooldown=respect_cooldown,
+            )
         await coord.async_request_refresh()
-        log.info("All managed DNS records update finished")
+        log.info("All managed DNS records update finished", trigger=trigger)
     except DNSManagerError as err:
-        log.error("Update all records failed", error=str(err))
+        log.error("Update all records failed", error=str(err), trigger=trigger)
         raise HomeAssistantError(str(err)) from err
 
 
@@ -130,24 +190,46 @@ def normalize_records(coord: DnsManagerCoordinator) -> list[dict]:
     return [normalize_record(r, coord.entry) for r in coord.entry.options.get(CONF_RECORDS, [])]
 
 
-async def async_update_record_by_uid(coord: DnsManagerCoordinator, uid: str) -> None:
+async def async_update_record_by_uid(
+    coord: DnsManagerCoordinator,
+    uid: str,
+    *,
+    trigger: str = TRIGGER_MANUAL,
+    respect_cooldown: bool = False,
+    ipv4_override: str | None = None,
+    ipv6_override: str | None = None,
+) -> bool:
+    """Write one record. Returns False if skipped (cooldown / nothing to write)."""
     log = coord.entry.runtime_data.activity_log
     rec_cfgs = [r for r in normalize_records(coord) if record_uid(r) == uid]
     if not rec_cfgs:
-        return
+        return False
     rec_cfg = rec_cfgs[0]
     record_name = str(rec_cfg.get(CONF_RECORD_NAME, uid))
 
+    if respect_cooldown and not coord.can_auto_write(uid):
+        cooldown = int(coord.entry.options.get(CONF_WRITE_COOLDOWN, DEFAULT_WRITE_COOLDOWN))
+        log.warning(
+            "Write skipped: cooldown active",
+            record_uid=uid,
+            name=record_name,
+            write_cooldown=cooldown,
+            trigger=trigger,
+        )
+        return False
+
     try:
-        expected = await _async_expected(coord, rec_cfg, ipv4_override=None, ipv6_override=None)
+        expected = await _async_expected(
+            coord, rec_cfg, ipv4_override=ipv4_override, ipv6_override=ipv6_override
+        )
         if expected.ipv4 is None and expected.ipv6 is None:
             log.warning("Update skipped: both IP families off", record_uid=uid, name=record_name)
-            return
+            return False
         if (expected.ipv4 is not None and not expected.ipv4) and (
             expected.ipv6 is not None and not expected.ipv6
         ):
             log.warning("Update skipped: no expected IP", record_uid=uid, name=record_name)
-            return
+            return False
 
         provider = get_provider_for_record(rec_cfg, coord.entry)
         zone_id = zone_id_for_record(rec_cfg, coord.entry)
@@ -159,6 +241,7 @@ async def async_update_record_by_uid(coord: DnsManagerCoordinator, uid: str) -> 
             provider=rec_cfg.get(CONF_PROVIDER_TYPE),
             ipv4=expected.ipv4,
             ipv6=expected.ipv6,
+            trigger=trigger,
         )
         await provider.update_addresses(
             zone_id,
@@ -168,6 +251,7 @@ async def async_update_record_by_uid(coord: DnsManagerCoordinator, uid: str) -> 
             ipv4=expected.ipv4 if expected.ipv4 else None,
             ipv6=expected.ipv6 if expected.ipv6 else None,
         )
+        coord.mark_write(uid)
         coord.set_last_updated(uid)
         log.info(
             "DNS record updated",
@@ -175,10 +259,31 @@ async def async_update_record_by_uid(coord: DnsManagerCoordinator, uid: str) -> 
             name=record_name,
             ipv4=expected.ipv4,
             ipv6=expected.ipv6,
+            trigger=trigger,
         )
+        _fire_synced(
+            coord,
+            uid=uid,
+            name=record_name,
+            ipv4=expected.ipv4,
+            ipv6=expected.ipv6,
+            trigger=trigger,
+        )
+        return True
     except DNSManagerError as err:
-        log.error("DNS record update failed", record_uid=uid, error=str(err))
-        raise HomeAssistantError(str(err)) from err
+        log.error(
+            "DNS record update failed",
+            record_uid=uid,
+            name=record_name,
+            error=str(err),
+            trigger=trigger,
+        )
+        _fire_sync_error(
+            coord, uid=uid, name=record_name, error=str(err), trigger=trigger
+        )
+        if trigger == TRIGGER_MANUAL:
+            raise HomeAssistantError(str(err)) from err
+        return False
 
 
 async def async_update_record_by_id(coord: DnsManagerCoordinator, record_id: str) -> None:
@@ -199,27 +304,22 @@ async def async_update_record_by_name(
                 continue
 
             uid = record_uid(rec_cfg)
-            expected = await _async_expected(
+            await async_update_record_by_uid(
                 coord,
-                rec_cfg,
+                uid,
+                trigger=TRIGGER_MANUAL,
+                respect_cooldown=False,
                 ipv4_override=ip_override,
                 ipv6_override=ipv6_override,
             )
-            if expected.ipv4 is None and expected.ipv6 is None:
-                continue
-
-            provider = get_provider_for_record(rec_cfg, coord.entry)
-            zone_id = zone_id_for_record(rec_cfg, coord.entry)
-            await provider.update_addresses(
-                zone_id,
-                name=str(rec_cfg.get(CONF_RECORD_NAME, uid)),
-                record_id=provider_record_id(rec_cfg),
-                record_id_aaaa=provider_record_id_aaaa(rec_cfg),
-                ipv4=expected.ipv4 if expected.ipv4 else None,
-                ipv6=expected.ipv6 if expected.ipv6 else None,
-            )
-            coord.set_last_updated(uid)
 
         await coord.async_request_refresh()
     except DNSManagerError as err:
         raise HomeAssistantError(str(err)) from err
+
+
+async def async_sync_on_start(coord: DnsManagerCoordinator) -> None:
+    """Startup write path: respects per-record cooldown."""
+    await async_update_all_records(
+        coord, trigger=TRIGGER_STARTUP, respect_cooldown=True
+    )

@@ -11,6 +11,7 @@ from custom_components.dns_manager.const import (
     CONF_RECORDS,
 )
 from custom_components.dns_manager.options_model import (
+    infer_ipv6_enabled,
     migrate_options,
     provider_display_label,
     upsert_provider,
@@ -274,3 +275,12 @@ def test_upsert_noip_merges_same_username():
     assert pid1 == pid2
     assert len(providers) == 1
     assert providers[0][CONF_PROVIDER_CONFIG]["password"] == "p2"
+
+
+def test_infer_ipv6_enabled_defaults_and_legacy():
+    assert infer_ipv6_enabled({}) is False
+    assert infer_ipv6_enabled({"ipv6_enabled": True}) is True
+    assert infer_ipv6_enabled({"ipv6_enabled": False, "ipv6_detection_url": "https://x"}) is False
+    assert infer_ipv6_enabled({"ipv6_detection_url": "https://api6.ipify.org"}) is True
+    assert infer_ipv6_enabled({"records": [{"ipv6_mode": "auto"}]}) is True
+    assert infer_ipv6_enabled({"records": [{"ipv6_mode": "off"}]}) is False
