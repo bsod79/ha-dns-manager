@@ -1,5 +1,10 @@
 # Changelog
 
+## 0.7.2
+
+- Fix crash with **auto_sync** enabled: first poll wrote DNS before `runtime_data` was set (`ConfigEntry` had no `runtime_data`). Activity log now comes from the coordinator; `runtime_data` is assigned before the first refresh.
+- Fix noisy unload error for the one-shot `homeassistant_started` listener used by **sync_on_start**.
+
 ## 0.7.1
 
 - Global **Enable IPv6** switch in General settings. When off, add/edit record hides IPv6 strategy; public IPv6 is not detected and AAAA is not managed.

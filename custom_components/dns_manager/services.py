@@ -167,7 +167,7 @@ async def async_update_all_records(
     trigger: str = TRIGGER_MANUAL,
     respect_cooldown: bool = False,
 ) -> None:
-    log = coord.entry.runtime_data.activity_log
+    log = coord.activity_log
     try:
         log.info("Updating all managed DNS records", trigger=trigger)
         for rec_cfg in normalize_records(coord):
@@ -200,7 +200,7 @@ async def async_update_record_by_uid(
     ipv6_override: str | None = None,
 ) -> bool:
     """Write one record. Returns False if skipped (cooldown / nothing to write)."""
-    log = coord.entry.runtime_data.activity_log
+    log = coord.activity_log
     rec_cfgs = [r for r in normalize_records(coord) if record_uid(r) == uid]
     if not rec_cfgs:
         return False

@@ -102,6 +102,9 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
 
     activity_log = DnsManagerActivityLog()
     coordinator = DnsManagerCoordinator(hass=hass, entry=entry, activity_log=activity_log)
+    # Set before first refresh: auto_sync may write during that refresh.
+    entry.runtime_data = RuntimeData(coordinator=coordinator, activity_log=activity_log)
+
     await coordinator.async_config_entry_first_refresh()
 
     activity_log.info(
@@ -114,7 +117,6 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
         managed_records=len(entry.options.get(CONF_RECORDS, [])),
     )
 
-    entry.runtime_data = RuntimeData(coordinator=coordinator, activity_log=activity_log)
     entry.async_on_unload(entry.add_update_listener(_async_reload_entry))
 
     await async_register_services(hass)
@@ -129,14 +131,23 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     if hass.state == CoreState.running:
         hass.async_create_task(_run_sync_on_start())
     else:
+        remove_started = None
 
         @callback
         def _on_started(_event: Event) -> None:
+            nonlocal remove_started
+            # listen_once already removed itself; avoid double-unsub on unload.
+            remove_started = None
             hass.async_create_task(_run_sync_on_start())
 
-        entry.async_on_unload(
-            hass.bus.async_listen_once(EVENT_HOMEASSISTANT_STARTED, _on_started)
-        )
+        remove_started = hass.bus.async_listen_once(EVENT_HOMEASSISTANT_STARTED, _on_started)
+
+        @callback
+        def _cancel_started() -> None:
+            if remove_started is not None:
+                remove_started()
+
+        entry.async_on_unload(_cancel_started)
 
     return True
 
