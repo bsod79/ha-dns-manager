@@ -6,6 +6,7 @@ import pytest
 
 from custom_components.dns_manager.const import (
     CONF_IP_ENTITY,
+    CONF_IP_ENTITY_ATTR,
     CONF_IP_MODE,
     CONF_IP_URL,
     CONF_IPV6_MODE,
@@ -115,6 +116,28 @@ async def test_resolve_expected_ip_from_entity():
     )
     assert ip == "203.0.113.10"
     hass.states.get.assert_called_once_with("sensor.wan_ip")
+
+
+@pytest.mark.asyncio
+async def test_resolve_expected_ip_from_entity_attribute():
+    session = MagicMock()
+    hass = MagicMock()
+    state = MagicMock()
+    state.state = "home"
+    state.attributes = {"ip": "10.0.0.42"}
+    hass.states.get = MagicMock(return_value=state)
+
+    ip = await resolve_expected_ip(
+        session,
+        {
+            CONF_IP_MODE: IP_MODE_ENTITY,
+            CONF_IP_ENTITY: "device_tracker.nas",
+            CONF_IP_ENTITY_ATTR: "ip",
+        },
+        public_ip="8.8.8.8",
+        hass=hass,
+    )
+    assert ip == "10.0.0.42"
 
 
 @pytest.mark.asyncio

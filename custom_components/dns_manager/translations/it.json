@@ -353,15 +353,19 @@
               "static_ip": "Static IPv4",
               "ip_url": "IPv4 detection URL",
               "ip_entity": "Entita sorgente IPv4",
+              "ip_entity_attr": "Attributo IPv4 (opzionale)",
               "static_ipv6": "Static IPv6",
               "ipv6_url": "IPv6 detection URL",
-              "ipv6_entity": "Entita sorgente IPv6"
+              "ipv6_entity": "Entita sorgente IPv6",
+              "ipv6_entity_attr": "Attributo IPv6 (opzionale)"
             },
             "data_description": {
               "ip_url": "Plain text or JSON with an ip field.",
-              "ip_entity": "Entita il cui stato e un indirizzo IPv4 (sensor, input_text o text).",
+              "ip_entity": "Qualsiasi entita. Attributo vuoto = usa lo state; altrimenti legge quell'attributo (es. ip, ip_address).",
+              "ip_entity_attr": "Nome attributo con l'IPv4. Vuoto = usa lo state.",
               "ipv6_url": "Plain text or JSON with an ip field.",
-              "ipv6_entity": "Entita il cui stato e un indirizzo IPv6 (sensor, input_text o text)."
+              "ipv6_entity": "Qualsiasi entita. Attributo vuoto = usa lo state; altrimenti legge quell'attributo.",
+              "ipv6_entity_attr": "Nome attributo con l'IPv6. Vuoto = usa lo state."
             }
           }
         }
@@ -407,15 +411,19 @@
               "static_ip": "Static IPv4",
               "ip_url": "IPv4 detection URL",
               "ip_entity": "Entita sorgente IPv4",
+              "ip_entity_attr": "Attributo IPv4 (opzionale)",
               "static_ipv6": "Static IPv6",
               "ipv6_url": "IPv6 detection URL",
-              "ipv6_entity": "Entita sorgente IPv6"
+              "ipv6_entity": "Entita sorgente IPv6",
+              "ipv6_entity_attr": "Attributo IPv6 (opzionale)"
             },
             "data_description": {
               "ip_url": "Plain text or JSON with an ip field.",
-              "ip_entity": "Entita il cui stato e un indirizzo IPv4 (sensor, input_text o text).",
+              "ip_entity": "Qualsiasi entita. Attributo vuoto = usa lo state; altrimenti legge quell'attributo (es. ip, ip_address).",
+              "ip_entity_attr": "Nome attributo con l'IPv4. Vuoto = usa lo state.",
               "ipv6_url": "Plain text or JSON with an ip field.",
-              "ipv6_entity": "Entita il cui stato e un indirizzo IPv6 (sensor, input_text o text)."
+              "ipv6_entity": "Qualsiasi entita. Attributo vuoto = usa lo state; altrimenti legge quell'attributo.",
+              "ipv6_entity_attr": "Nome attributo con l'IPv6. Vuoto = usa lo state."
             }
           }
         }

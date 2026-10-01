@@ -12,9 +12,11 @@ from homeassistant.helpers.entity_platform import AddEntitiesCallback
 from .const import (
     CONF_ENABLED,
     CONF_IP_ENTITY,
+    CONF_IP_ENTITY_ATTR,
     CONF_IP_MODE,
     CONF_IP_URL,
     CONF_IPV6_ENTITY,
+    CONF_IPV6_ENTITY_ATTR,
     CONF_IPV6_MODE,
     CONF_IPV6_URL,
     CONF_PROVIDER_TYPE,
@@ -209,12 +211,16 @@ class ManagedRecordStatusSensor(_ManagedRecordSensorBase):
             attrs["static_ip"] = str(row.get(CONF_STATIC_IP))
         if row and row.get(CONF_IP_ENTITY):
             attrs["ip_entity"] = str(row.get(CONF_IP_ENTITY))
+        if row and row.get(CONF_IP_ENTITY_ATTR):
+            attrs["ip_entity_attr"] = str(row.get(CONF_IP_ENTITY_ATTR))
         if row and row.get(CONF_IPV6_URL):
             attrs["ipv6_url"] = str(row.get(CONF_IPV6_URL))
         if row and row.get(CONF_STATIC_IPV6):
             attrs["static_ipv6"] = str(row.get(CONF_STATIC_IPV6))
         if row and row.get(CONF_IPV6_ENTITY):
             attrs["ipv6_entity"] = str(row.get(CONF_IPV6_ENTITY))
+        if row and row.get(CONF_IPV6_ENTITY_ATTR):
+            attrs["ipv6_entity_attr"] = str(row.get(CONF_IPV6_ENTITY_ATTR))
         if rs.last_updated:
             attrs["last_updated"] = rs.last_updated.isoformat()
         return attrs

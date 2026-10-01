@@ -23,7 +23,7 @@ IPv6 is **off by default**. Enable it under **Options → General settings → E
 | **Auto** | Instance public IPv4 URL | Instance public IPv6 URL |
 | **From URL** | Custom URL | Custom URL |
 | **Static** | Fixed IPv4 | Fixed IPv6 |
-| **From entity** | Entity state (sensor / input_text / text) | Entity state |
+| **From entity** | Entity state or attribute | Entity state or attribute |
 | **From Proxmox** | Guest address via saved IP source | Guest address via saved IP source |
 | **Off** | Do not manage | Do not manage |
 

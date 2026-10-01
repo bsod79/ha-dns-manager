@@ -13,9 +13,11 @@ from homeassistant.core import HomeAssistant
 
 from .const import (
     CONF_IP_ENTITY,
+    CONF_IP_ENTITY_ATTR,
     CONF_IP_MODE,
     CONF_IP_URL,
     CONF_IPV6_ENTITY,
+    CONF_IPV6_ENTITY_ATTR,
     CONF_IPV6_MODE,
     CONF_IPV6_PROXMOX_IFACE,
     CONF_IPV6_PROXMOX_KIND,
@@ -60,20 +62,38 @@ def _mode(rec_cfg: dict[str, Any], key: str, default: str) -> str:
     return str(rec_cfg.get(key, default) or default)
 
 
-def _ip_from_entity(hass: HomeAssistant | None, entity_id: str, *, family: str) -> str:
-    """Read entity state as an IP; empty if missing/unavailable/wrong family."""
-    if hass is None or not entity_id:
-        return ""
-    state = hass.states.get(entity_id)
-    if state is None or state.state in ("unknown", "unavailable", ""):
-        return ""
-    raw = str(state.state).strip()
+def _parse_ip(raw: str, *, family: str) -> str:
     try:
         if family == "ipv4":
             return str(ipaddress.IPv4Address(raw))
         return str(ipaddress.IPv6Address(raw))
     except ValueError:
         return ""
+
+
+def _ip_from_entity(
+    hass: HomeAssistant | None,
+    entity_id: str,
+    *,
+    family: str,
+    attribute: str | None = None,
+) -> str:
+    """Read entity state or attribute as an IP; empty if missing/unavailable/wrong family."""
+    if hass is None or not entity_id:
+        return ""
+    state = hass.states.get(entity_id)
+    if state is None:
+        return ""
+    attr = (attribute or "").strip()
+    if attr:
+        if attr not in state.attributes:
+            return ""
+        raw = str(state.attributes.get(attr) or "").strip()
+    else:
+        if state.state in ("unknown", "unavailable", ""):
+            return ""
+        raw = str(state.state).strip()
+    return _parse_ip(raw, family=family) if raw else ""
 
 
 async def _ip_from_proxmox(
@@ -151,7 +171,10 @@ async def resolve_expected_addresses(
             ipv4 = await detect_ip_from_url(session, url, family="ipv4") if url else ""
         elif mode == IP_MODE_ENTITY:
             ipv4 = _ip_from_entity(
-                hass, str(rec_cfg.get(CONF_IP_ENTITY, "") or "").strip(), family="ipv4"
+                hass,
+                str(rec_cfg.get(CONF_IP_ENTITY, "") or "").strip(),
+                family="ipv4",
+                attribute=str(rec_cfg.get(CONF_IP_ENTITY_ATTR, "") or "").strip() or None,
             )
         elif mode == IP_MODE_PROXMOX:
             try:
@@ -178,7 +201,10 @@ async def resolve_expected_addresses(
             ipv6 = await detect_ip_from_url(session, url, family="ipv6") if url else ""
         elif mode6 == IP_MODE_ENTITY:
             ipv6 = _ip_from_entity(
-                hass, str(rec_cfg.get(CONF_IPV6_ENTITY, "") or "").strip(), family="ipv6"
+                hass,
+                str(rec_cfg.get(CONF_IPV6_ENTITY, "") or "").strip(),
+                family="ipv6",
+                attribute=str(rec_cfg.get(CONF_IPV6_ENTITY_ATTR, "") or "").strip() or None,
             )
         elif mode6 == IP_MODE_PROXMOX:
             try:

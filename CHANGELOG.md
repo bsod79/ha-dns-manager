@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.8.5
+
+- **From entity**: pick any entity, optional attribute name (e.g. `ip` / `ip_address`). Empty attribute = use state. No more sensor-only filter.
+
 ## 0.8.4
 
 - Fix Proxmox empty interface filter picking `127.0.0.1` from `lo`: skip loopback interfaces and loopback addresses; prefer the first real NIC IP.

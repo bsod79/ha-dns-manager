@@ -24,11 +24,13 @@ from .const import (
     CONF_HOSTNAME,
     CONF_IP_DETECTION_URL,
     CONF_IP_ENTITY,
+    CONF_IP_ENTITY_ATTR,
     CONF_IP_MODE,
     CONF_IP_URL,
     CONF_IPV6_DETECTION_URL,
     CONF_IPV6_ENABLED,
     CONF_IPV6_ENTITY,
+    CONF_IPV6_ENTITY_ATTR,
     CONF_IPV6_MODE,
     CONF_IPV6_PROXMOX_IFACE,
     CONF_IPV6_PROXMOX_KIND,
@@ -75,7 +77,6 @@ from .const import (
     DEFAULT_SCAN_INTERVAL,
     DEFAULT_SYNC_ON_START,
     DEFAULT_WRITE_COOLDOWN,
-    ENTITY_IP_DOMAINS,
     IP_MODE_AUTO,
     IP_MODE_ENTITY,
     IP_MODE_OFF,
@@ -147,9 +148,7 @@ def _from_section(user_input: dict[str, Any], key: str) -> dict[str, Any]:
 
 
 def _entity_selector() -> selector.EntitySelector:
-    return selector.EntitySelector(
-        selector.EntitySelectorConfig(domain=list(ENTITY_IP_DOMAINS))
-    )
+    return selector.EntitySelector()
 
 
 def _needs_ip_details(ipv4_mode: str, ipv6_mode: str) -> bool:
@@ -1202,9 +1201,11 @@ class DnsManagerOptionsFlow(config_entries.OptionsFlow):
                 static_ip = None
                 ip_url = None
                 ip_entity = None
+                ip_entity_attr = None
                 static_ipv6 = None
                 ipv6_url = None
                 ipv6_entity = None
+                ipv6_entity_attr = None
                 if self._ip_mode_choice == IP_MODE_STATIC:
                     static_ip = _validate_ipv4(str(data[CONF_STATIC_IP]).strip())
                 elif self._ip_mode_choice == IP_MODE_URL:
@@ -1215,6 +1216,7 @@ class DnsManagerOptionsFlow(config_entries.OptionsFlow):
                     ip_entity = str(data[CONF_IP_ENTITY]).strip()
                     if not ip_entity:
                         raise ValueError("invalid_entity")
+                    ip_entity_attr = str(data.get(CONF_IP_ENTITY_ATTR) or "").strip() or None
                 if self._ipv6_enabled and self._ipv6_mode_choice == IP_MODE_STATIC:
                     static_ipv6 = _validate_ipv6(str(data[CONF_STATIC_IPV6]).strip())
                 elif self._ipv6_enabled and self._ipv6_mode_choice == IP_MODE_URL:
@@ -1225,6 +1227,7 @@ class DnsManagerOptionsFlow(config_entries.OptionsFlow):
                     ipv6_entity = str(data[CONF_IPV6_ENTITY]).strip()
                     if not ipv6_entity:
                         raise ValueError("invalid_entity")
+                    ipv6_entity_attr = str(data.get(CONF_IPV6_ENTITY_ATTR) or "").strip() or None
                 return self._finish_add_record(
                     self._ip_mode_choice,
                     static_ip,
@@ -1234,6 +1237,8 @@ class DnsManagerOptionsFlow(config_entries.OptionsFlow):
                     static_ipv6,
                     ipv6_url,
                     ipv6_entity,
+                    ip_entity_attr=ip_entity_attr,
+                    ipv6_entity_attr=ipv6_entity_attr,
                 )
             except Exception:  # noqa: BLE001
                 errors["base"] = "invalid_ip"
@@ -1245,12 +1250,14 @@ class DnsManagerOptionsFlow(config_entries.OptionsFlow):
             fields[vol.Required(CONF_IP_URL)] = str
         elif self._ip_mode_choice == IP_MODE_ENTITY:
             fields[vol.Required(CONF_IP_ENTITY)] = _entity_selector()
+            fields[vol.Optional(CONF_IP_ENTITY_ATTR)] = str
         if self._ipv6_enabled and self._ipv6_mode_choice == IP_MODE_STATIC:
             fields[vol.Required(CONF_STATIC_IPV6)] = str
         elif self._ipv6_enabled and self._ipv6_mode_choice == IP_MODE_URL:
             fields[vol.Required(CONF_IPV6_URL)] = str
         elif self._ipv6_enabled and self._ipv6_mode_choice == IP_MODE_ENTITY:
             fields[vol.Required(CONF_IPV6_ENTITY)] = _entity_selector()
+            fields[vol.Optional(CONF_IPV6_ENTITY_ATTR)] = str
 
         return self.async_show_form(
             step_id="add_record_ip_details",
@@ -1273,6 +1280,9 @@ class DnsManagerOptionsFlow(config_entries.OptionsFlow):
         static_ipv6: str | None,
         ipv6_url: str | None,
         ipv6_entity: str | None,
+        *,
+        ip_entity_attr: str | None = None,
+        ipv6_entity_attr: str | None = None,
     ) -> FlowResult:
         proxmox_fields = _apply_proxmox_target(
             ipv4_mode=ip_mode, ipv6_mode=ipv6_mode, target=self._proxmox_target
@@ -1289,10 +1299,12 @@ class DnsManagerOptionsFlow(config_entries.OptionsFlow):
                 CONF_STATIC_IP: static_ip,
                 CONF_IP_URL: ip_url,
                 CONF_IP_ENTITY: ip_entity,
+                CONF_IP_ENTITY_ATTR: ip_entity_attr,
                 CONF_IPV6_MODE: ipv6_mode,
                 CONF_STATIC_IPV6: static_ipv6,
                 CONF_IPV6_URL: ipv6_url,
                 CONF_IPV6_ENTITY: ipv6_entity,
+                CONF_IPV6_ENTITY_ATTR: ipv6_entity_attr,
                 CONF_ENABLED: True,
                 **proxmox_fields,
             }
@@ -1387,9 +1399,11 @@ class DnsManagerOptionsFlow(config_entries.OptionsFlow):
                 static_ip = None
                 ip_url = None
                 ip_entity = None
+                ip_entity_attr = None
                 static_ipv6 = None
                 ipv6_url = None
                 ipv6_entity = None
+                ipv6_entity_attr = None
                 if self._ip_mode_choice == IP_MODE_STATIC:
                     static_ip = _validate_ipv4(str(data[CONF_STATIC_IP]).strip())
                 elif self._ip_mode_choice == IP_MODE_URL:
@@ -1400,6 +1414,7 @@ class DnsManagerOptionsFlow(config_entries.OptionsFlow):
                     ip_entity = str(data[CONF_IP_ENTITY]).strip()
                     if not ip_entity:
                         raise ValueError("invalid_entity")
+                    ip_entity_attr = str(data.get(CONF_IP_ENTITY_ATTR) or "").strip() or None
                 if self._ipv6_enabled and self._ipv6_mode_choice == IP_MODE_STATIC:
                     static_ipv6 = _validate_ipv6(str(data[CONF_STATIC_IPV6]).strip())
                 elif self._ipv6_enabled and self._ipv6_mode_choice == IP_MODE_URL:
@@ -1410,6 +1425,7 @@ class DnsManagerOptionsFlow(config_entries.OptionsFlow):
                     ipv6_entity = str(data[CONF_IPV6_ENTITY]).strip()
                     if not ipv6_entity:
                         raise ValueError("invalid_entity")
+                    ipv6_entity_attr = str(data.get(CONF_IPV6_ENTITY_ATTR) or "").strip() or None
                 return self._finish_edit_record(
                     self._ip_mode_choice,
                     static_ip,
@@ -1419,6 +1435,8 @@ class DnsManagerOptionsFlow(config_entries.OptionsFlow):
                     ipv6_url,
                     ipv6_entity,
                     update_ipv6=self._ipv6_enabled,
+                    ip_entity_attr=ip_entity_attr,
+                    ipv6_entity_attr=ipv6_entity_attr,
                 )
             except Exception:  # noqa: BLE001
                 errors["base"] = "invalid_ip"
@@ -1433,6 +1451,8 @@ class DnsManagerOptionsFlow(config_entries.OptionsFlow):
             fields[
                 vol.Required(CONF_IP_ENTITY, default=default_ent) if default_ent else vol.Required(CONF_IP_ENTITY)
             ] = _entity_selector()
+            default_attr = str(rec.get(CONF_IP_ENTITY_ATTR) or "")
+            fields[vol.Optional(CONF_IP_ENTITY_ATTR, default=default_attr)] = str
         if self._ipv6_enabled and self._ipv6_mode_choice == IP_MODE_STATIC:
             fields[vol.Required(CONF_STATIC_IPV6, default=str(rec.get(CONF_STATIC_IPV6) or ""))] = str
         elif self._ipv6_enabled and self._ipv6_mode_choice == IP_MODE_URL:
@@ -1444,6 +1464,8 @@ class DnsManagerOptionsFlow(config_entries.OptionsFlow):
                 if default_ent6
                 else vol.Required(CONF_IPV6_ENTITY)
             ] = _entity_selector()
+            default_attr6 = str(rec.get(CONF_IPV6_ENTITY_ATTR) or "")
+            fields[vol.Optional(CONF_IPV6_ENTITY_ATTR, default=default_attr6)] = str
 
         return self.async_show_form(
             step_id="edit_record_ip_details",
@@ -1466,6 +1488,8 @@ class DnsManagerOptionsFlow(config_entries.OptionsFlow):
         ipv6_entity: str | None,
         *,
         update_ipv6: bool | None = None,
+        ip_entity_attr: str | None = None,
+        ipv6_entity_attr: str | None = None,
     ) -> FlowResult:
         apply_ipv6 = self._ipv6_enabled if update_ipv6 is None else update_ipv6
         effective_v6 = self._ipv6_mode_choice if apply_ipv6 else IP_MODE_OFF
@@ -1482,11 +1506,13 @@ class DnsManagerOptionsFlow(config_entries.OptionsFlow):
             updated[CONF_STATIC_IP] = static_ip
             updated[CONF_IP_URL] = ip_url
             updated[CONF_IP_ENTITY] = ip_entity
+            updated[CONF_IP_ENTITY_ATTR] = ip_entity_attr
             if apply_ipv6:
                 updated[CONF_IPV6_MODE] = self._ipv6_mode_choice
                 updated[CONF_STATIC_IPV6] = static_ipv6
                 updated[CONF_IPV6_URL] = ipv6_url
                 updated[CONF_IPV6_ENTITY] = ipv6_entity
+                updated[CONF_IPV6_ENTITY_ATTR] = ipv6_entity_attr
             # Always refresh IPv4 proxmox fields from target/mode; preserve ipv6
             # proxmox when global IPv6 is off.
             for key, value in proxmox_fields.items():
