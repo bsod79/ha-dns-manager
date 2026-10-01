@@ -1,5 +1,10 @@
 # Changelog
 
+## 0.8.0
+
+- **IP sources**: save Proxmox VE once (API token), then use **From Proxmox** on a managed record to read an LXC/QEMU guest address as the expected DNS IP.
+- Options menu adds **IP sources** alongside Providers / Managed records.
+
 ## 0.7.3
 
 - Fix `NameError: CONF_RECORDS is not defined` during auto_sync (missing import in `services.py`).

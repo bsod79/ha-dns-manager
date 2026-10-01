@@ -15,6 +15,7 @@ from .const import (
     CONF_HOSTNAME,
     CONF_IP_DETECTION_URL,
     CONF_IP_MODE,
+    CONF_IP_SOURCES,
     CONF_IPV6_DETECTION_URL,
     CONF_IPV6_ENABLED,
     CONF_IPV6_MODE,
@@ -24,12 +25,19 @@ from .const import (
     CONF_PROVIDER_NAME,
     CONF_PROVIDER_TYPE,
     CONF_PROVIDERS,
+    CONF_PVE_DEFAULT_NODE,
+    CONF_PVE_HOST,
+    CONF_PVE_TOKEN_ID,
     CONF_RECORD_ID,
     CONF_RECORD_NAME,
     CONF_RECORD_TYPE,
     CONF_RECORD_UID,
     CONF_RECORDS,
     CONF_SCAN_INTERVAL,
+    CONF_SOURCE_CONFIG,
+    CONF_SOURCE_ID,
+    CONF_SOURCE_NAME,
+    CONF_SOURCE_TYPE,
     CONF_SUBDOMAIN,
     CONF_SYNC_ON_START,
     CONF_TOKEN,
@@ -46,6 +54,8 @@ from .const import (
     DEFAULT_WRITE_COOLDOWN,
     IP_MODE_AUTO,
     IP_MODE_OFF,
+    IP_SOURCE_LABELS,
+    IP_SOURCE_PROXMOX,
     PROVIDER_CLOUDFLARE,
     PROVIDER_DUCKDNS,
     PROVIDER_DYNDNS,
@@ -506,6 +516,7 @@ def build_options_payload(
     ipv6_enabled: bool = DEFAULT_IPV6_ENABLED,
     sync_on_start: bool = DEFAULT_SYNC_ON_START,
     write_cooldown: int = DEFAULT_WRITE_COOLDOWN,
+    ip_sources: list[dict[str, Any]] | None = None,
 ) -> dict[str, Any]:
     return {
         CONF_SCAN_INTERVAL: scan_interval,
@@ -516,6 +527,7 @@ def build_options_payload(
         CONF_SYNC_ON_START: sync_on_start,
         CONF_WRITE_COOLDOWN: write_cooldown,
         CONF_PROVIDERS: providers,
+        CONF_IP_SOURCES: list(ip_sources or []),
         CONF_RECORDS: records,
     }
 
@@ -530,8 +542,102 @@ def default_options() -> dict[str, Any]:
         sync_on_start=DEFAULT_SYNC_ON_START,
         write_cooldown=DEFAULT_WRITE_COOLDOWN,
         providers=[],
+        ip_sources=[],
         records=[],
     )
+
+
+def get_ip_sources(entry: ConfigEntry | dict[str, Any]) -> list[dict[str, Any]]:
+    opts = entry.options if isinstance(entry, ConfigEntry) else entry
+    raw = opts.get(CONF_IP_SOURCES) or []
+    return [dict(s) for s in raw if isinstance(s, dict)]
+
+
+def source_uid(source: dict[str, Any]) -> str:
+    return str(source.get(CONF_SOURCE_ID) or "")
+
+
+def find_ip_source(sources: list[dict[str, Any]], source_id: str) -> dict[str, Any] | None:
+    for src in sources:
+        if source_uid(src) == source_id:
+            return src
+    return None
+
+
+def ip_source_display_label(source: dict[str, Any]) -> str:
+    name = str(source.get(CONF_SOURCE_NAME) or "").strip()
+    stype = str(source.get(CONF_SOURCE_TYPE) or "")
+    type_label = IP_SOURCE_LABELS.get(stype, stype)
+    cfg = source.get(CONF_SOURCE_CONFIG) or {}
+    host = str(cfg.get(CONF_PVE_HOST) or "").strip()
+    if name and host:
+        return f"{name} ({host})" if host not in name else name
+    if name:
+        return name
+    if host:
+        return f"{type_label} — {host}"
+    return type_label or source_uid(source)
+
+
+def ip_source_identity(source_type: str, config: dict[str, Any]) -> str | None:
+    if source_type == IP_SOURCE_PROXMOX:
+        host = _normalize_pve_host(str(config.get(CONF_PVE_HOST) or ""))
+        token = str(config.get(CONF_PVE_TOKEN_ID) or "").strip().lower()
+        if host and token:
+            return f"{source_type}:{host}:{token}"
+        return None
+    return None
+
+
+def _normalize_pve_host(host: str) -> str:
+    value = host.strip().rstrip("/").lower()
+    if value.startswith("https://"):
+        value = value[len("https://") :]
+    elif value.startswith("http://"):
+        value = value[len("http://") :]
+    return value
+
+
+def upsert_ip_source(
+    sources: list[dict[str, Any]],
+    *,
+    source_type: str,
+    name: str,
+    config: dict[str, Any],
+) -> tuple[str, bool]:
+    ident = ip_source_identity(source_type, config)
+    if ident is not None:
+        for src in sources:
+            existing = ip_source_identity(
+                str(src.get(CONF_SOURCE_TYPE) or ""),
+                dict(src.get(CONF_SOURCE_CONFIG) or {}),
+            )
+            if existing == ident:
+                src[CONF_SOURCE_NAME] = name
+                src[CONF_SOURCE_TYPE] = source_type
+                src[CONF_SOURCE_CONFIG] = dict(config)
+                return source_uid(src), True
+
+    sid = str(uuid.uuid4())
+    sources.append(
+        {
+            CONF_SOURCE_ID: sid,
+            CONF_SOURCE_NAME: name,
+            CONF_SOURCE_TYPE: source_type,
+            CONF_SOURCE_CONFIG: dict(config),
+        }
+    )
+    return sid, False
+
+
+def default_proxmox_source_name(config: dict[str, Any]) -> str:
+    host = str(config.get(CONF_PVE_HOST) or "").strip()
+    node = str(config.get(CONF_PVE_DEFAULT_NODE) or "").strip()
+    if host and node:
+        return f"Proxmox — {host} ({node})"
+    if host:
+        return f"Proxmox — {host}"
+    return "Proxmox VE"
 
 
 def resolve_provider_bundle(rec: dict[str, Any], entry: ConfigEntry) -> tuple[str, dict[str, Any]]:

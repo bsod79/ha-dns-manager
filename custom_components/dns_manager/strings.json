@@ -26,10 +26,11 @@
     "step": {
       "init": {
         "title": "DNS Manager",
-        "description": "Providers: {providers_count} · Managed records: {records_count}",
+        "description": "Providers: {providers_count} · IP sources: {ip_sources_count} · Managed records: {records_count}",
         "menu_options": {
           "general": "General settings",
           "providers_menu": "Providers",
+          "ip_sources_menu": "IP sources",
           "records_menu": "Managed records"
         }
       },
@@ -67,6 +68,60 @@
           "add_provider_type": "Add provider",
           "remove_provider_select": "Remove provider",
           "init": "Back"
+        }
+      },
+      "ip_sources_menu": {
+        "title": "IP sources",
+        "description": "Saved IP sources: {ip_sources_count}. Use these with the From Proxmox IP strategy on a managed record.",
+        "menu_options": {
+          "add_ip_source_type": "Add IP source",
+          "remove_ip_source_select": "Remove IP source",
+          "init": "Back"
+        }
+      },
+      "add_ip_source_type": {
+        "title": "Add IP source",
+        "description": "Choose the type of IP source to configure.",
+        "sections": {
+          "source": {
+            "name": "Type",
+            "data": {
+              "type": "IP source"
+            }
+          }
+        }
+      },
+      "add_ip_source_proxmox": {
+        "title": "Add IP source — Proxmox VE",
+        "description": "API token from Datacenter → Permissions → API Tokens. Needs at least VM.Audit on the guests you will read.",
+        "sections": {
+          "proxmox": {
+            "name": "Connection",
+            "data": {
+              "host": "Proxmox URL",
+              "token_id": "Token ID (user@realm!tokenname)",
+              "token_secret": "Token secret",
+              "verify_ssl": "Verify TLS certificate",
+              "default_node": "Default node (optional)"
+            },
+            "data_description": {
+              "host": "Example: https://192.168.1.10:8006",
+              "token_id": "Full token id including user and token name.",
+              "default_node": "Pre-selected when attaching a guest to a record."
+            }
+          }
+        }
+      },
+      "remove_ip_source_select": {
+        "title": "Remove IP source",
+        "description": "Saved IP sources: {ip_sources_count}. Sources used by managed records cannot be removed.",
+        "sections": {
+          "selection": {
+            "name": "IP source",
+            "data": {
+              "source_id": "IP source to remove"
+            }
+          }
         }
       },
       "records_menu": {
@@ -238,8 +293,52 @@
               "ipv6_mode": "IPv6 (AAAA record)"
             },
             "data_description": {
-              "ip_mode": "Auto uses the instance public IPv4; From URL / Static / From entity as configured. Off skips IPv4.",
-              "ipv6_mode": "Requires a public IPv6 URL in General settings for Auto. From entity reads an entity state. Off skips IPv6."
+              "ip_mode": "Auto uses the instance public IPv4; From URL / Static / From entity / From Proxmox as configured. Off skips IPv4.",
+              "ipv6_mode": "Requires Enable IPv6 in General. From Proxmox reads a guest address. Off skips IPv6."
+            }
+          }
+        }
+      },
+      "add_record_proxmox_source": {
+        "title": "Add record — Proxmox source",
+        "description": "Record: {record}. Pick a saved Proxmox IP source.",
+        "sections": {
+          "proxmox": {
+            "name": "IP source",
+            "data": {
+              "source_id": "Proxmox IP source"
+            }
+          }
+        }
+      },
+      "add_record_proxmox_node": {
+        "title": "Add record — Proxmox node",
+        "description": "Record: {record}. Choose guest type and node.",
+        "sections": {
+          "node": {
+            "name": "Node",
+            "data": {
+              "proxmox_kind": "Guest type",
+              "proxmox_node": "Node"
+            },
+            "data_description": {
+              "proxmox_kind": "QEMU VMs require the QEMU Guest Agent installed and enabled."
+            }
+          }
+        }
+      },
+      "add_record_proxmox_guest": {
+        "title": "Add record — Proxmox guest",
+        "description": "Record: {record} · {kind} on {node} ({guests_count} guests).",
+        "sections": {
+          "guest": {
+            "name": "Guest",
+            "data": {
+              "proxmox_vmid": "Guest",
+              "proxmox_iface": "Interface filter (optional)"
+            },
+            "data_description": {
+              "proxmox_iface": "Leave empty to use the first non-link-local address. Example: eth0 or ens18."
             }
           }
         }
@@ -291,8 +390,8 @@
               "enabled": "Enabled"
             },
             "data_description": {
-              "ip_mode": "Auto uses the instance public IPv4; From URL / Static / From entity as configured. Off skips IPv4.",
-              "ipv6_mode": "Requires a public IPv6 URL in General settings for Auto. From entity reads an entity state. Off skips IPv6.",
+              "ip_mode": "Auto uses the instance public IPv4; From URL / Static / From entity / From Proxmox as configured. Off skips IPv4.",
+              "ipv6_mode": "Requires Enable IPv6 in General. From Proxmox reads a guest address. Off skips IPv6.",
               "enabled": "Disabled records are monitored but never updated."
             }
           }
@@ -344,7 +443,10 @@
     "abort": {
       "no_managed_records": "No managed records yet. Add one from Options → Managed records → Add record.",
       "no_providers": "No providers yet. Add one from Options → Providers → Add provider.",
-      "provider_in_use": "Cannot remove: one or more records still use this provider."
+      "no_ip_sources": "No IP sources yet. Add Proxmox from Options → IP sources → Add IP source.",
+      "provider_in_use": "Cannot remove: one or more records still use this provider.",
+      "ip_source_in_use": "Cannot remove: one or more records still use this IP source.",
+      "unknown": "Unexpected error"
     }
   },
   "entity": {

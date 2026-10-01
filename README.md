@@ -5,11 +5,14 @@ Home Assistant custom integration to manage DNS records across multiple provider
 ## Model
 
 1. **Providers** (saved once) — Cloudflare zone, DuckDNS account token, No-IP, DynDNS, dynv6  
-2. **Managed records** — pick a saved provider, then choose IPv4/IPv6 strategy  
+2. **IP sources** (optional) — Proxmox VE API token; used only to **read** guest addresses  
+3. **Managed records** — pick a DNS provider, then choose IPv4/IPv6 strategy (including From Proxmox)
 
-Each record can use a different provider. Credentials are not re-entered when adding records.
+Each record can use a different DNS provider. Credentials are not re-entered when adding records.
 
 **DuckDNS:** one provider = one account token. Each managed record is a subdomain under that token.
+
+**Proxmox:** not a DNS provider. Save it under IP sources, then set a record strategy to **From Proxmox** and pick LXC/QEMU guest.
 
 ## IP strategy (per record, per family)
 
@@ -21,6 +24,7 @@ IPv6 is **off by default**. Enable it under **Options → General settings → E
 | **From URL** | Custom URL | Custom URL |
 | **Static** | Fixed IPv4 | Fixed IPv6 |
 | **From entity** | Entity state (sensor / input_text / text) | Entity state |
+| **From Proxmox** | Guest address via saved IP source | Guest address via saved IP source |
 | **Off** | Do not manage | Do not manage |
 
 Default after migration: IPv4 Auto, IPv6 Off (and global Enable IPv6 off, unless you already had an IPv6 URL or managed AAAA).
@@ -29,14 +33,16 @@ Default after migration: IPv4 Auto, IPv6 Off (and global Enable IPv6 off, unless
 
 1. Add **DNS Manager** (name the instance).
 2. **Options → Providers → Add provider**.
-3. **Options → Managed records → Add record** → select provider → (Cloudflare: pick record / DuckDNS: enter subdomain) → IP strategy.
-4. Optional under **Options → General settings**: **Enable IPv6**, IPv6 detection URL, **auto_sync**, **sync_on_start**, **write_cooldown**.
+3. Optional: **Options → IP sources → Add IP source** (Proxmox).
+4. **Options → Managed records → Add record** → select DNS provider → IP strategy (From Proxmox if configured).
+5. Optional under **Options → General settings**: **Enable IPv6**, IPv6 detection URL, **auto_sync**, **sync_on_start**, **write_cooldown**.
 
 Options menu structure:
 
 ```
 General settings
 Providers         → Add provider · Remove provider · Back
+IP sources        → Add IP source · Remove IP source · Back
 Managed records   → Add record · Edit record · Remove record · Back
 ```
 

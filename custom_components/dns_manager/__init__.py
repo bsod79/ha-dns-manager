@@ -13,6 +13,7 @@ from .activity_log import DnsManagerActivityLog
 from .const import (
     CONF_AUTO_SYNC,
     CONF_IP_DETECTION_URL,
+    CONF_IP_SOURCES,
     CONF_IPV6_DETECTION_URL,
     CONF_IPV6_ENABLED,
     CONF_PROVIDERS,
@@ -30,7 +31,7 @@ from .const import (
     PLATFORMS,
 )
 from .coordinator import DnsManagerCoordinator
-from .options_model import build_options_payload, infer_ipv6_enabled, migrate_options
+from .options_model import build_options_payload, get_ip_sources, infer_ipv6_enabled, migrate_options
 from .services import async_register_services, async_sync_on_start, async_unregister_services
 
 _LOGGER = logging.getLogger(__name__)
@@ -65,6 +66,7 @@ async def async_migrate_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
             sync_on_start=bool(entry.options.get(CONF_SYNC_ON_START, DEFAULT_SYNC_ON_START)),
             write_cooldown=int(entry.options.get(CONF_WRITE_COOLDOWN, DEFAULT_WRITE_COOLDOWN)),
             providers=providers,
+            ip_sources=get_ip_sources(entry),
             records=records,
         )
         hass.config_entries.async_update_entry(entry, options=new_options, version=3)
@@ -81,7 +83,11 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     """Set up DNS Manager from a config entry."""
 
     providers, records, migrated = migrate_options(entry)
-    needs_persist = migrated or CONF_IPV6_ENABLED not in entry.options
+    needs_persist = (
+        migrated
+        or CONF_IPV6_ENABLED not in entry.options
+        or CONF_IP_SOURCES not in entry.options
+    )
     if needs_persist:
         new_options = build_options_payload(
             scan_interval=int(entry.options.get(CONF_SCAN_INTERVAL, DEFAULT_SCAN_INTERVAL)),
@@ -96,6 +102,7 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
             sync_on_start=bool(entry.options.get(CONF_SYNC_ON_START, DEFAULT_SYNC_ON_START)),
             write_cooldown=int(entry.options.get(CONF_WRITE_COOLDOWN, DEFAULT_WRITE_COOLDOWN)),
             providers=providers,
+            ip_sources=get_ip_sources(entry),
             records=records,
         )
         hass.config_entries.async_update_entry(entry, options=new_options)

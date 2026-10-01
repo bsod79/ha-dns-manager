@@ -117,6 +117,7 @@ async def _async_expected(
         ipv4_override=ipv4_override,
         ipv6_override=ipv6_override,
         ipv6_enabled=is_ipv6_enabled(coord.entry),
+        entry=coord.entry,
     )
 
 

@@ -7,6 +7,7 @@ from dataclasses import dataclass
 from typing import Any
 
 import aiohttp
+from homeassistant.config_entries import ConfigEntry
 from homeassistant.core import HomeAssistant
 
 from .const import (
@@ -15,15 +16,32 @@ from .const import (
     CONF_IP_URL,
     CONF_IPV6_ENTITY,
     CONF_IPV6_MODE,
+    CONF_IPV6_PROXMOX_IFACE,
+    CONF_IPV6_PROXMOX_KIND,
+    CONF_IPV6_PROXMOX_NODE,
+    CONF_IPV6_PROXMOX_SOURCE_ID,
+    CONF_IPV6_PROXMOX_VMID,
     CONF_IPV6_URL,
+    CONF_PROXMOX_IFACE,
+    CONF_PROXMOX_KIND,
+    CONF_PROXMOX_NODE,
+    CONF_PROXMOX_SOURCE_ID,
+    CONF_PROXMOX_VMID,
+    CONF_SOURCE_CONFIG,
+    CONF_SOURCE_TYPE,
     CONF_STATIC_IP,
     CONF_STATIC_IPV6,
     IP_MODE_AUTO,
     IP_MODE_ENTITY,
     IP_MODE_OFF,
+    IP_MODE_PROXMOX,
     IP_MODE_STATIC,
     IP_MODE_URL,
+    IP_SOURCE_PROXMOX,
 )
+from .exceptions import IPDetectionError
+from .ip_sources.proxmox import proxmox_client_from_config
+from .options_model import find_ip_source, get_ip_sources
 from .utils.ip_detection import detect_ip_from_url
 
 
@@ -55,6 +73,44 @@ def _ip_from_entity(hass: HomeAssistant | None, entity_id: str, *, family: str) 
         return ""
 
 
+async def _ip_from_proxmox(
+    session: aiohttp.ClientSession,
+    rec_cfg: dict[str, Any],
+    *,
+    family: str,
+    entry: ConfigEntry | None,
+) -> str:
+    if family == "ipv4":
+        source_id = str(rec_cfg.get(CONF_PROXMOX_SOURCE_ID) or "").strip()
+        kind = str(rec_cfg.get(CONF_PROXMOX_KIND) or "").strip()
+        node = str(rec_cfg.get(CONF_PROXMOX_NODE) or "").strip()
+        vmid = str(rec_cfg.get(CONF_PROXMOX_VMID) or "").strip()
+        iface = str(rec_cfg.get(CONF_PROXMOX_IFACE) or "").strip() or None
+    else:
+        source_id = str(rec_cfg.get(CONF_IPV6_PROXMOX_SOURCE_ID) or "").strip()
+        kind = str(rec_cfg.get(CONF_IPV6_PROXMOX_KIND) or "").strip()
+        node = str(rec_cfg.get(CONF_IPV6_PROXMOX_NODE) or "").strip()
+        vmid = str(rec_cfg.get(CONF_IPV6_PROXMOX_VMID) or "").strip()
+        iface = str(rec_cfg.get(CONF_IPV6_PROXMOX_IFACE) or "").strip() or None
+
+    if not source_id or not kind or not node or not vmid:
+        return ""
+    if entry is None:
+        raise IPDetectionError("Proxmox IP source requires a config entry")
+
+    sources = get_ip_sources(entry)
+    src = find_ip_source(sources, source_id)
+    if src is None:
+        raise IPDetectionError(f"Proxmox IP source {source_id} not found")
+    if str(src.get(CONF_SOURCE_TYPE) or "") != IP_SOURCE_PROXMOX:
+        raise IPDetectionError("Selected IP source is not Proxmox")
+
+    client = proxmox_client_from_config(session, dict(src.get(CONF_SOURCE_CONFIG) or {}))
+    return await client.get_guest_ip(
+        node=node, kind=kind, vmid=vmid, family=family, iface=iface
+    )
+
+
 async def resolve_expected_addresses(
     session: aiohttp.ClientSession,
     rec_cfg: dict[str, Any],
@@ -65,6 +121,7 @@ async def resolve_expected_addresses(
     ipv4_override: str | None = None,
     ipv6_override: str | None = None,
     ipv6_enabled: bool = True,
+    entry: ConfigEntry | None = None,
 ) -> ExpectedAddresses:
     """Return the IPv4/IPv6 that should be set on DNS (None = skip that family)."""
     ipv4: str | None = None
@@ -86,6 +143,11 @@ async def resolve_expected_addresses(
             ipv4 = _ip_from_entity(
                 hass, str(rec_cfg.get(CONF_IP_ENTITY, "") or "").strip(), family="ipv4"
             )
+        elif mode == IP_MODE_PROXMOX:
+            try:
+                ipv4 = await _ip_from_proxmox(session, rec_cfg, family="ipv4", entry=entry)
+            except IPDetectionError:
+                ipv4 = ""
         else:
             ipv4 = public_ipv4  # may be ""
 
@@ -107,6 +169,11 @@ async def resolve_expected_addresses(
             ipv6 = _ip_from_entity(
                 hass, str(rec_cfg.get(CONF_IPV6_ENTITY, "") or "").strip(), family="ipv6"
             )
+        elif mode6 == IP_MODE_PROXMOX:
+            try:
+                ipv6 = await _ip_from_proxmox(session, rec_cfg, family="ipv6", entry=entry)
+            except IPDetectionError:
+                ipv6 = ""
         else:
             ipv6 = public_ipv6
 
@@ -120,6 +187,7 @@ async def resolve_expected_ip(
     public_ip: str,
     ip_override: str | None = None,
     hass: HomeAssistant | None = None,
+    entry: ConfigEntry | None = None,
 ) -> str:
     """Backward-compatible IPv4-only helper."""
     result = await resolve_expected_addresses(
@@ -129,5 +197,6 @@ async def resolve_expected_ip(
         public_ipv6="",
         hass=hass,
         ipv4_override=ip_override,
+        entry=entry,
     )
     return result.ipv4 or ""

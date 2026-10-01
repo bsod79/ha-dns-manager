@@ -188,6 +188,7 @@ class DnsManagerCoordinator(DataUpdateCoordinator[CoordinatorData]):
                     public_ipv6=public_ipv6,
                     hass=self.hass,
                     ipv6_enabled=ipv6_on,
+                    entry=self.entry,
                 )
                 expected_v4 = expected.ipv4
                 expected_v6 = expected.ipv6

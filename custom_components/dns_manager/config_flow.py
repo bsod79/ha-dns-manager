@@ -10,6 +10,7 @@ import voluptuous as vol
 from homeassistant import config_entries
 from homeassistant.data_entry_flow import FlowResult, section
 from homeassistant.helpers import selector
+from homeassistant.helpers.aiohttp_client import async_get_clientsession
 
 from .const import (
     AUTH_MODE_GLOBAL_KEY,
@@ -29,17 +30,35 @@ from .const import (
     CONF_IPV6_ENABLED,
     CONF_IPV6_ENTITY,
     CONF_IPV6_MODE,
+    CONF_IPV6_PROXMOX_IFACE,
+    CONF_IPV6_PROXMOX_KIND,
+    CONF_IPV6_PROXMOX_NODE,
+    CONF_IPV6_PROXMOX_SOURCE_ID,
+    CONF_IPV6_PROXMOX_VMID,
     CONF_IPV6_URL,
     CONF_PASSWORD,
     CONF_PROVIDER_CONFIG,
     CONF_PROVIDER_ID,
     CONF_PROVIDER_TYPE,
+    CONF_PROXMOX_IFACE,
+    CONF_PROXMOX_KIND,
+    CONF_PROXMOX_NODE,
+    CONF_PROXMOX_SOURCE_ID,
+    CONF_PROXMOX_VMID,
+    CONF_PVE_DEFAULT_NODE,
+    CONF_PVE_HOST,
+    CONF_PVE_TOKEN_ID,
+    CONF_PVE_TOKEN_SECRET,
+    CONF_PVE_VERIFY_SSL,
     CONF_RECORD_ID,
     CONF_RECORD_ID_AAAA,
     CONF_RECORD_NAME,
     CONF_RECORD_TYPE,
     CONF_RECORD_UID,
     CONF_SCAN_INTERVAL,
+    CONF_SOURCE_CONFIG,
+    CONF_SOURCE_ID,
+    CONF_SOURCE_TYPE,
     CONF_STATIC_IP,
     CONF_STATIC_IPV6,
     CONF_SUBDOMAIN,
@@ -60,10 +79,15 @@ from .const import (
     IP_MODE_AUTO,
     IP_MODE_ENTITY,
     IP_MODE_OFF,
+    IP_MODE_PROXMOX,
     IP_MODE_STATIC,
     IP_MODE_URL,
+    IP_SOURCE_LABELS,
+    IP_SOURCE_PROXMOX,
     IPV4_MODE_LABELS,
     IPV6_MODE_LABELS,
+    PROXMOX_KIND_LABELS,
+    PROXMOX_KIND_LXC,
     PROVIDER_CLOUDFLARE,
     PROVIDER_DUCKDNS,
     PROVIDER_DYNDNS,
@@ -72,17 +96,24 @@ from .const import (
     PROVIDER_NOIP,
 )
 from .exceptions import ProviderAPIError, ProviderAuthError
+from .ip_sources.proxmox import proxmox_client_from_config
 from .options_model import (
     build_options_payload,
     ddns_hostname_from_provider,
     default_options,
+    default_proxmox_source_name,
+    find_ip_source,
     find_provider_in_list,
+    get_ip_sources,
     infer_ipv6_enabled,
+    ip_source_display_label,
     is_account_provider,
     is_zone_provider,
     migrate_options,
     provider_display_label,
     provider_uid,
+    source_uid,
+    upsert_ip_source,
     upsert_provider,
 )
 from .providers import get_provider
@@ -126,6 +157,48 @@ def _needs_ip_details(ipv4_mode: str, ipv6_mode: str) -> bool:
     return ipv4_mode in detail_modes or ipv6_mode in detail_modes
 
 
+def _needs_proxmox(ipv4_mode: str, ipv6_mode: str) -> bool:
+    return ipv4_mode == IP_MODE_PROXMOX or ipv6_mode == IP_MODE_PROXMOX
+
+
+def _empty_proxmox_fields() -> dict[str, Any]:
+    return {
+        CONF_PROXMOX_SOURCE_ID: None,
+        CONF_PROXMOX_KIND: None,
+        CONF_PROXMOX_NODE: None,
+        CONF_PROXMOX_VMID: None,
+        CONF_PROXMOX_IFACE: None,
+        CONF_IPV6_PROXMOX_SOURCE_ID: None,
+        CONF_IPV6_PROXMOX_KIND: None,
+        CONF_IPV6_PROXMOX_NODE: None,
+        CONF_IPV6_PROXMOX_VMID: None,
+        CONF_IPV6_PROXMOX_IFACE: None,
+    }
+
+
+def _apply_proxmox_target(
+    *,
+    ipv4_mode: str,
+    ipv6_mode: str,
+    target: dict[str, Any] | None,
+) -> dict[str, Any]:
+    fields = _empty_proxmox_fields()
+    if not target:
+        return fields
+    if ipv4_mode == IP_MODE_PROXMOX:
+        fields[CONF_PROXMOX_SOURCE_ID] = target.get(CONF_PROXMOX_SOURCE_ID)
+        fields[CONF_PROXMOX_KIND] = target.get(CONF_PROXMOX_KIND)
+        fields[CONF_PROXMOX_NODE] = target.get(CONF_PROXMOX_NODE)
+        fields[CONF_PROXMOX_VMID] = target.get(CONF_PROXMOX_VMID)
+        fields[CONF_PROXMOX_IFACE] = target.get(CONF_PROXMOX_IFACE)
+    if ipv6_mode == IP_MODE_PROXMOX:
+        fields[CONF_IPV6_PROXMOX_SOURCE_ID] = target.get(CONF_PROXMOX_SOURCE_ID)
+        fields[CONF_IPV6_PROXMOX_KIND] = target.get(CONF_PROXMOX_KIND)
+        fields[CONF_IPV6_PROXMOX_NODE] = target.get(CONF_PROXMOX_NODE)
+        fields[CONF_IPV6_PROXMOX_VMID] = target.get(CONF_PROXMOX_VMID)
+        fields[CONF_IPV6_PROXMOX_IFACE] = target.get(CONF_PROXMOX_IFACE)
+    return fields
+
 class DnsManagerConfigFlow(config_entries.ConfigFlow, domain="dns_manager"):
     VERSION = 3
 
@@ -161,6 +234,7 @@ class DnsManagerOptionsFlow(config_entries.OptionsFlow):
         self._sync_on_start = DEFAULT_SYNC_ON_START
         self._write_cooldown = DEFAULT_WRITE_COOLDOWN
         self._providers: list[dict[str, Any]] = []
+        self._ip_sources: list[dict[str, Any]] = []
         self._records: list[dict[str, Any]] = []
 
         self._adding_provider_type: str | None = None
@@ -178,6 +252,13 @@ class DnsManagerOptionsFlow(config_entries.OptionsFlow):
         self._ipv6_mode_choice: str = IP_MODE_OFF
         self._editing_record_uid: str | None = None
         self._edit_enabled: bool = True
+        self._proxmox_target: dict[str, Any] | None = None
+        self._pve_source_id: str | None = None
+        self._pve_kind: str = PROXMOX_KIND_LXC
+        self._pve_node: str = ""
+        self._pve_nodes: list[str] = []
+        self._pve_guests: list[dict[str, str]] = []
+        self._flow_context: str = "add"  # add | edit
 
     def _load_state(self) -> None:
         self._scan_interval = int(
@@ -200,6 +281,7 @@ class DnsManagerOptionsFlow(config_entries.OptionsFlow):
         providers, records, _ = migrate_options(self.config_entry)
         self._providers = providers
         self._records = records
+        self._ip_sources = get_ip_sources(self.config_entry)
 
     def _payload(self) -> dict[str, Any]:
         return build_options_payload(
@@ -211,6 +293,7 @@ class DnsManagerOptionsFlow(config_entries.OptionsFlow):
             sync_on_start=self._sync_on_start,
             write_cooldown=self._write_cooldown,
             providers=self._providers,
+            ip_sources=self._ip_sources,
             records=self._records,
         )
 
@@ -238,8 +321,12 @@ class DnsManagerOptionsFlow(config_entries.OptionsFlow):
     def _counts(self) -> dict[str, str]:
         return {
             "providers_count": str(len(self._providers)),
+            "ip_sources_count": str(len(self._ip_sources)),
             "records_count": str(len(self._records)),
         }
+
+    def _ip_source_map(self) -> dict[str, str]:
+        return {source_uid(s): ip_source_display_label(s) for s in self._ip_sources}
 
     def _selected_provider_label(self) -> str:
         prov = find_provider_in_list(self._providers, str(self._selected_provider_id))
@@ -254,13 +341,20 @@ class DnsManagerOptionsFlow(config_entries.OptionsFlow):
             return ""
         return record_display_label(normalize_record(rec, self.config_entry), self.config_entry)
 
+    def _pve_client_for_source(self, source_id: str):
+        src = find_ip_source(self._ip_sources, source_id)
+        if src is None:
+            raise ProviderAPIError("IP source not found")
+        session = async_get_clientsession(self.hass)
+        return proxmox_client_from_config(session, dict(src.get(CONF_SOURCE_CONFIG) or {}))
+
     # --- Menus ---
 
     async def async_step_init(self, user_input: dict[str, Any] | None = None) -> FlowResult:
         self._load_state()
         return self.async_show_menu(
             step_id="init",
-            menu_options=["general", "providers_menu", "records_menu"],
+            menu_options=["general", "providers_menu", "ip_sources_menu", "records_menu"],
             description_placeholders=self._counts(),
         )
 
@@ -268,6 +362,13 @@ class DnsManagerOptionsFlow(config_entries.OptionsFlow):
         return self.async_show_menu(
             step_id="providers_menu",
             menu_options=["add_provider_type", "remove_provider_select", "init"],
+            description_placeholders=self._counts(),
+        )
+
+    async def async_step_ip_sources_menu(self, user_input: dict[str, Any] | None = None) -> FlowResult:
+        return self.async_show_menu(
+            step_id="ip_sources_menu",
+            menu_options=["add_ip_source_type", "remove_ip_source_select", "init"],
             description_placeholders=self._counts(),
         )
 
@@ -572,6 +673,96 @@ class DnsManagerOptionsFlow(config_entries.OptionsFlow):
             description_placeholders=self._counts(),
         )
 
+    # --- IP sources (Proxmox, …) ---
+
+    async def async_step_add_ip_source_type(self, user_input: dict[str, Any] | None = None) -> FlowResult:
+        if user_input is not None:
+            stype = str(_from_section(user_input, "source")[CONF_SOURCE_TYPE])
+            if stype == IP_SOURCE_PROXMOX:
+                return await self.async_step_add_ip_source_proxmox()
+            return self.async_abort(reason="unknown")
+
+        return self.async_show_form(
+            step_id="add_ip_source_type",
+            data_schema=_sectioned(
+                "source",
+                {vol.Required(CONF_SOURCE_TYPE): vol.In(IP_SOURCE_LABELS)},
+            ),
+        )
+
+    async def async_step_add_ip_source_proxmox(self, user_input: dict[str, Any] | None = None) -> FlowResult:
+        errors: dict[str, str] = {}
+        if user_input is not None:
+            try:
+                data = _from_section(user_input, "proxmox")
+                host = str(data[CONF_PVE_HOST]).strip()
+                if not host.startswith(("http://", "https://")):
+                    host = f"https://{host}"
+                config = {
+                    CONF_PVE_HOST: host,
+                    CONF_PVE_TOKEN_ID: str(data[CONF_PVE_TOKEN_ID]).strip(),
+                    CONF_PVE_TOKEN_SECRET: str(data[CONF_PVE_TOKEN_SECRET]).strip(),
+                    CONF_PVE_VERIFY_SSL: bool(data.get(CONF_PVE_VERIFY_SSL, True)),
+                    CONF_PVE_DEFAULT_NODE: str(data.get(CONF_PVE_DEFAULT_NODE) or "").strip() or None,
+                }
+                session = async_get_clientsession(self.hass)
+                client = proxmox_client_from_config(session, config)
+                await client.validate_credentials()
+                upsert_ip_source(
+                    self._ip_sources,
+                    source_type=IP_SOURCE_PROXMOX,
+                    name=default_proxmox_source_name(config),
+                    config=config,
+                )
+                return self._save()
+            except ProviderAuthError:
+                errors["base"] = "invalid_auth"
+            except ProviderAPIError:
+                errors["base"] = "cannot_connect"
+            except Exception:  # noqa: BLE001
+                errors["base"] = "unknown"
+
+        return self.async_show_form(
+            step_id="add_ip_source_proxmox",
+            data_schema=_sectioned(
+                "proxmox",
+                {
+                    vol.Required(CONF_PVE_HOST): str,
+                    vol.Required(CONF_PVE_TOKEN_ID): str,
+                    vol.Required(CONF_PVE_TOKEN_SECRET): str,
+                    vol.Optional(CONF_PVE_VERIFY_SSL, default=True): bool,
+                    vol.Optional(CONF_PVE_DEFAULT_NODE, default=""): str,
+                },
+            ),
+            errors=errors,
+        )
+
+    async def async_step_remove_ip_source_select(
+        self, user_input: dict[str, Any] | None = None
+    ) -> FlowResult:
+        if not self._ip_sources:
+            return self.async_abort(reason="no_ip_sources")
+
+        if user_input is not None:
+            sid = str(_from_section(user_input, "selection")[CONF_SOURCE_ID])
+            in_use = any(
+                str(r.get(CONF_PROXMOX_SOURCE_ID) or "") == sid
+                or str(r.get(CONF_IPV6_PROXMOX_SOURCE_ID) or "") == sid
+                for r in self._records
+            )
+            if in_use:
+                return self.async_abort(reason="ip_source_in_use")
+            self._ip_sources = [s for s in self._ip_sources if source_uid(s) != sid]
+            return self._save()
+
+        return self.async_show_form(
+            step_id="remove_ip_source_select",
+            data_schema=_sectioned(
+                "selection", {vol.Required(CONF_SOURCE_ID): vol.In(self._ip_source_map())}
+            ),
+            description_placeholders=self._counts(),
+        )
+
     # --- Records ---
 
     async def async_step_add_record_select_provider(
@@ -753,6 +944,7 @@ class DnsManagerOptionsFlow(config_entries.OptionsFlow):
         )
 
     async def async_step_add_record_ip_mode(self, user_input: dict[str, Any] | None = None) -> FlowResult:
+        self._flow_context = "add"
         if user_input is not None:
             data = _from_section(user_input, "strategy")
             self._ip_mode_choice = str(data[CONF_IP_MODE])
@@ -771,8 +963,11 @@ class DnsManagerOptionsFlow(config_entries.OptionsFlow):
                         "provider": self._selected_provider_label(),
                     },
                 )
-            needs_details = _needs_ip_details(self._ip_mode_choice, self._ipv6_mode_choice)
-            if needs_details:
+            if _needs_proxmox(self._ip_mode_choice, self._ipv6_mode_choice):
+                if not self._ip_sources:
+                    return self.async_abort(reason="no_ip_sources")
+                return await self.async_step_add_record_proxmox_source()
+            if _needs_ip_details(self._ip_mode_choice, self._ipv6_mode_choice):
                 return await self.async_step_add_record_ip_details()
             return self._finish_add_record(
                 self._ip_mode_choice, None, None, None, self._ipv6_mode_choice, None, None, None
@@ -787,6 +982,155 @@ class DnsManagerOptionsFlow(config_entries.OptionsFlow):
             },
         )
 
+    async def async_step_add_record_proxmox_source(
+        self, user_input: dict[str, Any] | None = None
+    ) -> FlowResult:
+        if user_input is not None:
+            self._pve_source_id = str(_from_section(user_input, "proxmox")[CONF_SOURCE_ID])
+            self._pve_nodes = []
+            self._pve_guests = []
+            return await self.async_step_add_record_proxmox_node()
+
+        return self.async_show_form(
+            step_id="add_record_proxmox_source",
+            data_schema=_sectioned(
+                "proxmox",
+                {vol.Required(CONF_SOURCE_ID): vol.In(self._ip_source_map())},
+            ),
+            description_placeholders={
+                "record": self._adding_record_label()
+                if self._flow_context == "add"
+                else self._editing_record_label(),
+            },
+        )
+
+    async def async_step_add_record_proxmox_node(
+        self, user_input: dict[str, Any] | None = None
+    ) -> FlowResult:
+        errors: dict[str, str] = {}
+        source_id = str(self._pve_source_id or "")
+
+        if user_input is not None:
+            data = _from_section(user_input, "node")
+            self._pve_kind = str(data[CONF_PROXMOX_KIND])
+            self._pve_node = str(data[CONF_PROXMOX_NODE])
+            self._pve_guests = []
+            return await self.async_step_add_record_proxmox_guest()
+
+        try:
+            client = self._pve_client_for_source(source_id)
+            self._pve_nodes = await client.list_nodes()
+            src = find_ip_source(self._ip_sources, source_id)
+            cfg = (src or {}).get(CONF_SOURCE_CONFIG) or {}
+            default_node = str(cfg.get(CONF_PVE_DEFAULT_NODE) or "")
+            if default_node and default_node in self._pve_nodes:
+                self._pve_node = default_node
+            elif self._pve_nodes and not self._pve_node:
+                self._pve_node = self._pve_nodes[0]
+        except ProviderAuthError:
+            errors["base"] = "invalid_auth"
+        except Exception:  # noqa: BLE001
+            errors["base"] = "cannot_connect"
+
+        nodes_map = {n: n for n in self._pve_nodes}
+        if not nodes_map:
+            nodes_map = {"_": "(no nodes)"}
+
+        return self.async_show_form(
+            step_id="add_record_proxmox_node",
+            data_schema=_sectioned(
+                "node",
+                {
+                    vol.Required(CONF_PROXMOX_KIND, default=self._pve_kind): vol.In(
+                        PROXMOX_KIND_LABELS
+                    ),
+                    vol.Required(
+                        CONF_PROXMOX_NODE, default=self._pve_node or next(iter(nodes_map))
+                    ): vol.In(nodes_map),
+                },
+            ),
+            errors=errors,
+            description_placeholders={
+                "record": self._adding_record_label()
+                if self._flow_context == "add"
+                else self._editing_record_label(),
+            },
+        )
+
+    async def async_step_add_record_proxmox_guest(
+        self, user_input: dict[str, Any] | None = None
+    ) -> FlowResult:
+        errors: dict[str, str] = {}
+        source_id = str(self._pve_source_id or "")
+
+        if user_input is not None:
+            try:
+                data = _from_section(user_input, "guest")
+                vmid = str(data[CONF_PROXMOX_VMID])
+                iface = str(data.get(CONF_PROXMOX_IFACE) or "").strip() or None
+                self._proxmox_target = {
+                    CONF_PROXMOX_SOURCE_ID: source_id,
+                    CONF_PROXMOX_KIND: self._pve_kind,
+                    CONF_PROXMOX_NODE: self._pve_node,
+                    CONF_PROXMOX_VMID: vmid,
+                    CONF_PROXMOX_IFACE: iface,
+                }
+                if _needs_ip_details(self._ip_mode_choice, self._ipv6_mode_choice):
+                    if self._flow_context == "edit":
+                        return await self.async_step_edit_record_ip_details()
+                    return await self.async_step_add_record_ip_details()
+                if self._flow_context == "edit":
+                    return self._finish_edit_record(
+                        self._ip_mode_choice, None, None, None, None, None, None
+                    )
+                return self._finish_add_record(
+                    self._ip_mode_choice,
+                    None,
+                    None,
+                    None,
+                    self._ipv6_mode_choice,
+                    None,
+                    None,
+                    None,
+                )
+            except Exception:  # noqa: BLE001
+                errors["base"] = "unknown"
+
+        try:
+            client = self._pve_client_for_source(source_id)
+            self._pve_guests = await client.list_guests(self._pve_node, self._pve_kind)
+        except ProviderAuthError:
+            errors["base"] = "invalid_auth"
+        except Exception:  # noqa: BLE001
+            errors["base"] = "cannot_connect"
+
+        guests_map = {
+            g["vmid"]: f"{g['vmid']} — {g['name']}"
+            + (f" ({g['status']})" if g.get("status") else "")
+            for g in self._pve_guests
+        }
+        if not guests_map:
+            guests_map = {"_": "(no guests)"}
+
+        return self.async_show_form(
+            step_id="add_record_proxmox_guest",
+            data_schema=_sectioned(
+                "guest",
+                {
+                    vol.Required(CONF_PROXMOX_VMID): vol.In(guests_map),
+                    vol.Optional(CONF_PROXMOX_IFACE, default=""): str,
+                },
+            ),
+            errors=errors,
+            description_placeholders={
+                "record": self._adding_record_label()
+                if self._flow_context == "add"
+                else self._editing_record_label(),
+                "guests_count": str(len(self._pve_guests)),
+                "node": self._pve_node,
+                "kind": PROXMOX_KIND_LABELS.get(self._pve_kind, self._pve_kind),
+            },
+        )
     def _ip_strategy_schema(self, ipv4_default: str, ipv6_default: str) -> vol.Schema:
         fields: dict[Any, Any] = {
             vol.Required(CONF_IP_MODE, default=ipv4_default): vol.In(IPV4_MODE_LABELS),
@@ -883,6 +1227,9 @@ class DnsManagerOptionsFlow(config_entries.OptionsFlow):
         ipv6_url: str | None,
         ipv6_entity: str | None,
     ) -> FlowResult:
+        proxmox_fields = _apply_proxmox_target(
+            ipv4_mode=ip_mode, ipv6_mode=ipv6_mode, target=self._proxmox_target
+        )
         self._records.append(
             {
                 CONF_RECORD_UID: str(uuid.uuid4()),
@@ -900,10 +1247,11 @@ class DnsManagerOptionsFlow(config_entries.OptionsFlow):
                 CONF_IPV6_URL: ipv6_url,
                 CONF_IPV6_ENTITY: ipv6_entity,
                 CONF_ENABLED: True,
+                **proxmox_fields,
             }
         )
+        self._proxmox_target = None
         return self._save()
-
     async def async_step_edit_record_select(self, user_input: dict[str, Any] | None = None) -> FlowResult:
         if not self._records:
             return self.async_abort(reason="no_managed_records")
@@ -913,9 +1261,20 @@ class DnsManagerOptionsFlow(config_entries.OptionsFlow):
             rec = next((r for r in self._records if record_uid(r) == self._editing_record_uid), None)
             if rec is None:
                 return self.async_abort(reason="no_managed_records")
+            self._flow_context = "edit"
             self._edit_enabled = bool(rec.get(CONF_ENABLED, True))
             self._ip_mode_choice = str(rec.get(CONF_IP_MODE, IP_MODE_AUTO))
             self._ipv6_mode_choice = str(rec.get(CONF_IPV6_MODE, IP_MODE_OFF))
+            self._proxmox_target = None
+            if rec.get(CONF_PROXMOX_SOURCE_ID) or rec.get(CONF_IPV6_PROXMOX_SOURCE_ID):
+                self._proxmox_target = {
+                    CONF_PROXMOX_SOURCE_ID: rec.get(CONF_PROXMOX_SOURCE_ID)
+                    or rec.get(CONF_IPV6_PROXMOX_SOURCE_ID),
+                    CONF_PROXMOX_KIND: rec.get(CONF_PROXMOX_KIND) or rec.get(CONF_IPV6_PROXMOX_KIND),
+                    CONF_PROXMOX_NODE: rec.get(CONF_PROXMOX_NODE) or rec.get(CONF_IPV6_PROXMOX_NODE),
+                    CONF_PROXMOX_VMID: rec.get(CONF_PROXMOX_VMID) or rec.get(CONF_IPV6_PROXMOX_VMID),
+                    CONF_PROXMOX_IFACE: rec.get(CONF_PROXMOX_IFACE) or rec.get(CONF_IPV6_PROXMOX_IFACE),
+                }
             return await self.async_step_edit_record_ip_mode()
 
         return self.async_show_form(
@@ -925,12 +1284,12 @@ class DnsManagerOptionsFlow(config_entries.OptionsFlow):
         )
 
     async def async_step_edit_record_ip_mode(self, user_input: dict[str, Any] | None = None) -> FlowResult:
+        self._flow_context = "edit"
         if user_input is not None:
             data = _from_section(user_input, "strategy")
             self._ip_mode_choice = str(data[CONF_IP_MODE])
             if self._ipv6_enabled:
                 self._ipv6_mode_choice = str(data.get(CONF_IPV6_MODE, IP_MODE_OFF))
-            # When IPv6 is globally off, keep the stored per-record IPv6 settings.
             self._edit_enabled = bool(data.get(CONF_ENABLED, True))
             if self._ip_mode_choice == IP_MODE_OFF and (
                 not self._ipv6_enabled or self._ipv6_mode_choice == IP_MODE_OFF
@@ -942,8 +1301,11 @@ class DnsManagerOptionsFlow(config_entries.OptionsFlow):
                     description_placeholders={"record": self._editing_record_label()},
                 )
             effective_v6 = self._ipv6_mode_choice if self._ipv6_enabled else IP_MODE_OFF
-            needs_details = _needs_ip_details(self._ip_mode_choice, effective_v6)
-            if needs_details:
+            if _needs_proxmox(self._ip_mode_choice, effective_v6):
+                if not self._ip_sources:
+                    return self.async_abort(reason="no_ip_sources")
+                return await self.async_step_add_record_proxmox_source()
+            if _needs_ip_details(self._ip_mode_choice, effective_v6):
                 return await self.async_step_edit_record_ip_details()
             return self._finish_edit_record(
                 self._ip_mode_choice, None, None, None, None, None, None
@@ -1059,6 +1421,10 @@ class DnsManagerOptionsFlow(config_entries.OptionsFlow):
         update_ipv6: bool | None = None,
     ) -> FlowResult:
         apply_ipv6 = self._ipv6_enabled if update_ipv6 is None else update_ipv6
+        effective_v6 = self._ipv6_mode_choice if apply_ipv6 else IP_MODE_OFF
+        proxmox_fields = _apply_proxmox_target(
+            ipv4_mode=ip_mode, ipv6_mode=effective_v6, target=self._proxmox_target
+        )
         new_records: list[dict[str, Any]] = []
         for r in self._records:
             if record_uid(r) != str(self._editing_record_uid):
@@ -1074,11 +1440,17 @@ class DnsManagerOptionsFlow(config_entries.OptionsFlow):
                 updated[CONF_STATIC_IPV6] = static_ipv6
                 updated[CONF_IPV6_URL] = ipv6_url
                 updated[CONF_IPV6_ENTITY] = ipv6_entity
+            # Always refresh IPv4 proxmox fields from target/mode; preserve ipv6
+            # proxmox when global IPv6 is off.
+            for key, value in proxmox_fields.items():
+                if not apply_ipv6 and key.startswith("ipv6_"):
+                    continue
+                updated[key] = value
             updated[CONF_ENABLED] = self._edit_enabled
             new_records.append(updated)
         self._records = new_records
+        self._proxmox_target = None
         return self._save()
-
     async def async_step_remove_record_select(self, user_input: dict[str, Any] | None = None) -> FlowResult:
         if not self._records:
             return self.async_abort(reason="no_managed_records")

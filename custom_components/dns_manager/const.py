@@ -35,6 +35,7 @@ CONF_AUTO_SYNC = "auto_sync"
 CONF_SYNC_ON_START = "sync_on_start"
 CONF_WRITE_COOLDOWN = "write_cooldown"
 CONF_PROVIDERS = "providers"
+CONF_IP_SOURCES = "ip_sources"
 CONF_RECORDS = "records"
 
 CONF_PROVIDER_ID = "provider_id"
@@ -44,6 +45,22 @@ CONF_PROVIDER_CONFIG = "provider_config"
 CONF_CREDENTIALS = "credentials"
 CONF_ZONE_ID = "zone_id"
 CONF_ZONE_NAME = "zone_name"
+
+# IP sources (Proxmox, …) — credentials once; pick guest per record
+CONF_SOURCE_ID = "source_id"
+CONF_SOURCE_NAME = "name"
+CONF_SOURCE_TYPE = "type"
+CONF_SOURCE_CONFIG = "config"
+IP_SOURCE_PROXMOX = "proxmox"
+IP_SOURCE_LABELS: dict[str, str] = {
+    IP_SOURCE_PROXMOX: "Proxmox VE",
+}
+
+CONF_PVE_HOST = "host"
+CONF_PVE_TOKEN_ID = "token_id"
+CONF_PVE_TOKEN_SECRET = "token_secret"
+CONF_PVE_VERIFY_SSL = "verify_ssl"
+CONF_PVE_DEFAULT_NODE = "default_node"
 
 CONF_AUTH_MODE = "auth_mode"
 AUTH_MODE_TOKEN = "token"
@@ -71,26 +88,45 @@ CONF_IP_MODE = "ip_mode"
 CONF_STATIC_IP = "static_ip"
 CONF_IP_URL = "ip_url"
 CONF_IP_ENTITY = "ip_entity"
+CONF_PROXMOX_SOURCE_ID = "proxmox_source_id"
+CONF_PROXMOX_KIND = "proxmox_kind"
+CONF_PROXMOX_NODE = "proxmox_node"
+CONF_PROXMOX_VMID = "proxmox_vmid"
+CONF_PROXMOX_IFACE = "proxmox_iface"
 
 # IPv6 strategy
 CONF_IPV6_MODE = "ipv6_mode"
 CONF_STATIC_IPV6 = "static_ipv6"
 CONF_IPV6_URL = "ipv6_url"
 CONF_IPV6_ENTITY = "ipv6_entity"
+CONF_IPV6_PROXMOX_SOURCE_ID = "ipv6_proxmox_source_id"
+CONF_IPV6_PROXMOX_KIND = "ipv6_proxmox_kind"
+CONF_IPV6_PROXMOX_NODE = "ipv6_proxmox_node"
+CONF_IPV6_PROXMOX_VMID = "ipv6_proxmox_vmid"
+CONF_IPV6_PROXMOX_IFACE = "ipv6_proxmox_iface"
 
 CONF_ENABLED = "enabled"
+
+PROXMOX_KIND_LXC = "lxc"
+PROXMOX_KIND_QEMU = "qemu"
+PROXMOX_KIND_LABELS: dict[str, str] = {
+    PROXMOX_KIND_LXC: "LXC container",
+    PROXMOX_KIND_QEMU: "QEMU VM (guest agent)",
+}
 
 IP_MODE_OFF = "off"
 IP_MODE_AUTO = "auto"
 IP_MODE_URL = "url"
 IP_MODE_STATIC = "static"
 IP_MODE_ENTITY = "entity"
+IP_MODE_PROXMOX = "proxmox"
 
 IP_MODE_LABELS: dict[str, str] = {
     IP_MODE_AUTO: "Auto (instance public IP)",
     IP_MODE_URL: "From URL",
     IP_MODE_STATIC: "Static",
     IP_MODE_ENTITY: "From entity",
+    IP_MODE_PROXMOX: "From Proxmox",
     IP_MODE_OFF: "Off (do not manage)",
 }
 
@@ -101,6 +137,7 @@ IPV6_MODE_LABELS: dict[str, str] = {
     IP_MODE_URL: "From URL",
     IP_MODE_STATIC: "Static",
     IP_MODE_ENTITY: "From entity",
+    IP_MODE_PROXMOX: "From Proxmox",
 }
 
 DEFAULT_SCAN_INTERVAL = 300
