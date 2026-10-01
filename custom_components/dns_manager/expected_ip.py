@@ -98,6 +98,10 @@ async def _ip_from_proxmox(
 
     if not source_id or not kind or not node or not vmid:
         return ""
+    if not str(vmid).isdigit():
+        raise IPDetectionError(
+            f"Invalid Proxmox VMID '{vmid}'. Re-edit the record and pick a real guest."
+        )
     if entry is None:
         raise IPDetectionError("Proxmox IP source requires a config entry")
 

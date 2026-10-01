@@ -143,6 +143,8 @@ class ProxmoxIpClient:
         iface: str | None = None,
     ) -> str:
         """Return first usable address for the guest, or raise IPDetectionError."""
+        if not str(vmid).isdigit():
+            raise IPDetectionError(f"Invalid Proxmox VMID: {vmid}")
         if kind == PROXMOX_KIND_LXC:
             return await self._ip_from_lxc(node, vmid, family=family, iface=iface)
         if kind == PROXMOX_KIND_QEMU:

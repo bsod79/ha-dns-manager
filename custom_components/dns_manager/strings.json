@@ -438,6 +438,8 @@
       "invalid_auth": "Invalid authentication",
       "invalid_ip": "Invalid IP address or URL",
       "record_already_managed": "Record is already managed",
+      "no_proxmox_nodes": "No Proxmox nodes returned. Check token ACL (Sys.Audit / Datacenter access).",
+      "no_proxmox_guests": "No guests on this node (or token lacks VM.Audit). Pick another node/type.",
       "unknown": "Unexpected error"
     },
     "abort": {

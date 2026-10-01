@@ -1,5 +1,10 @@
 # Changelog
 
+## 0.8.2
+
+- Fix invalid Proxmox VMID `_` saved when the guest list was empty (placeholder option). Empty lists now show an error instead of a fake guest.
+- Reject non-numeric VMIDs at runtime with a clear message (re-edit the record).
+
 ## 0.8.1
 
 - Fix coordinator crash when Proxmox returns HTTP 403/401: treat as IP resolution failure instead of aborting the poll.

@@ -1034,21 +1034,22 @@ class DnsManagerOptionsFlow(config_entries.OptionsFlow):
 
         nodes_map = {n: n for n in self._pve_nodes}
         if not nodes_map:
-            nodes_map = {"_": "(no nodes)"}
+            errors.setdefault("base", "no_proxmox_nodes")
+            nodes_map = {}
+
+        schema_fields: dict[Any, Any] = {
+            vol.Required(CONF_PROXMOX_KIND, default=self._pve_kind): vol.In(PROXMOX_KIND_LABELS),
+        }
+        if nodes_map:
+            schema_fields[
+                vol.Required(
+                    CONF_PROXMOX_NODE, default=self._pve_node or next(iter(nodes_map))
+                )
+            ] = vol.In(nodes_map)
 
         return self.async_show_form(
             step_id="add_record_proxmox_node",
-            data_schema=_sectioned(
-                "node",
-                {
-                    vol.Required(CONF_PROXMOX_KIND, default=self._pve_kind): vol.In(
-                        PROXMOX_KIND_LABELS
-                    ),
-                    vol.Required(
-                        CONF_PROXMOX_NODE, default=self._pve_node or next(iter(nodes_map))
-                    ): vol.In(nodes_map),
-                },
-            ),
+            data_schema=_sectioned("node", schema_fields),
             errors=errors,
             description_placeholders={
                 "record": self._adding_record_label()
@@ -1066,7 +1067,9 @@ class DnsManagerOptionsFlow(config_entries.OptionsFlow):
         if user_input is not None:
             try:
                 data = _from_section(user_input, "guest")
-                vmid = str(data[CONF_PROXMOX_VMID])
+                vmid = str(data[CONF_PROXMOX_VMID]).strip()
+                if not vmid.isdigit():
+                    raise ValueError("invalid_vmid")
                 iface = str(data.get(CONF_PROXMOX_IFACE) or "").strip() or None
                 self._proxmox_target = {
                     CONF_PROXMOX_SOURCE_ID: source_id,
@@ -1093,6 +1096,8 @@ class DnsManagerOptionsFlow(config_entries.OptionsFlow):
                     None,
                     None,
                 )
+            except ValueError:
+                errors["base"] = "no_proxmox_guests"
             except Exception:  # noqa: BLE001
                 errors["base"] = "unknown"
 
@@ -1108,25 +1113,25 @@ class DnsManagerOptionsFlow(config_entries.OptionsFlow):
             g["vmid"]: f"{g['vmid']} — {g['name']}"
             + (f" ({g['status']})" if g.get("status") else "")
             for g in self._pve_guests
+            if str(g.get("vmid") or "").isdigit()
         }
         if not guests_map:
-            guests_map = {"_": "(no guests)"}
+            errors.setdefault("base", "no_proxmox_guests")
+
+        schema_fields: dict[Any, Any] = {}
+        if guests_map:
+            schema_fields[vol.Required(CONF_PROXMOX_VMID)] = vol.In(guests_map)
+        schema_fields[vol.Optional(CONF_PROXMOX_IFACE, default="")] = str
 
         return self.async_show_form(
             step_id="add_record_proxmox_guest",
-            data_schema=_sectioned(
-                "guest",
-                {
-                    vol.Required(CONF_PROXMOX_VMID): vol.In(guests_map),
-                    vol.Optional(CONF_PROXMOX_IFACE, default=""): str,
-                },
-            ),
+            data_schema=_sectioned("guest", schema_fields),
             errors=errors,
             description_placeholders={
                 "record": self._adding_record_label()
                 if self._flow_context == "add"
                 else self._editing_record_label(),
-                "guests_count": str(len(self._pve_guests)),
+                "guests_count": str(len(guests_map)),
                 "node": self._pve_node,
                 "kind": PROXMOX_KIND_LABELS.get(self._pve_kind, self._pve_kind),
             },
