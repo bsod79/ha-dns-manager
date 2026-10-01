@@ -1,5 +1,10 @@
 # Changelog
 
+## 0.8.1
+
+- Fix coordinator crash when Proxmox returns HTTP 403/401: treat as IP resolution failure instead of aborting the poll.
+- Clearer Proxmox errors: 403 → missing ACL (`VM.Audit` on the guest); 401 → bad token.
+
 ## 0.8.0
 
 - **IP sources**: save Proxmox VE once (API token), then use **From Proxmox** on a managed record to read an LXC/QEMU guest address as the expected DNS IP.

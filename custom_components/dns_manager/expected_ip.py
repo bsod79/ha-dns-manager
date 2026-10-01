@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import ipaddress
+import logging
 from dataclasses import dataclass
 from typing import Any
 
@@ -39,10 +40,12 @@ from .const import (
     IP_MODE_URL,
     IP_SOURCE_PROXMOX,
 )
-from .exceptions import IPDetectionError
+from .exceptions import DNSManagerError, IPDetectionError
 from .ip_sources.proxmox import proxmox_client_from_config
 from .options_model import find_ip_source, get_ip_sources
 from .utils.ip_detection import detect_ip_from_url
+
+_LOGGER = logging.getLogger(__name__)
 
 
 @dataclass(slots=True)
@@ -106,9 +109,12 @@ async def _ip_from_proxmox(
         raise IPDetectionError("Selected IP source is not Proxmox")
 
     client = proxmox_client_from_config(session, dict(src.get(CONF_SOURCE_CONFIG) or {}))
-    return await client.get_guest_ip(
-        node=node, kind=kind, vmid=vmid, family=family, iface=iface
-    )
+    try:
+        return await client.get_guest_ip(
+            node=node, kind=kind, vmid=vmid, family=family, iface=iface
+        )
+    except DNSManagerError as err:
+        raise IPDetectionError(str(err)) from err
 
 
 async def resolve_expected_addresses(
@@ -146,7 +152,8 @@ async def resolve_expected_addresses(
         elif mode == IP_MODE_PROXMOX:
             try:
                 ipv4 = await _ip_from_proxmox(session, rec_cfg, family="ipv4", entry=entry)
-            except IPDetectionError:
+            except IPDetectionError as err:
+                _LOGGER.warning("Proxmox IPv4 resolution failed: %s", err)
                 ipv4 = ""
         else:
             ipv4 = public_ipv4  # may be ""
@@ -172,7 +179,8 @@ async def resolve_expected_addresses(
         elif mode6 == IP_MODE_PROXMOX:
             try:
                 ipv6 = await _ip_from_proxmox(session, rec_cfg, family="ipv6", entry=entry)
-            except IPDetectionError:
+            except IPDetectionError as err:
+                _LOGGER.warning("Proxmox IPv6 resolution failed: %s", err)
                 ipv6 = ""
         else:
             ipv6 = public_ipv6

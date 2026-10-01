@@ -70,8 +70,15 @@ class ProxmoxIpClient:
                 timeout=aiohttp.ClientTimeout(total=20),
             ) as resp:
                 text = await resp.text()
-                if resp.status in (401, 403):
-                    raise ProviderAuthError(f"Proxmox auth failed (HTTP {resp.status})")
+                if resp.status == 401:
+                    raise ProviderAuthError(
+                        "Proxmox authentication failed (HTTP 401). Check token id and secret."
+                    )
+                if resp.status == 403:
+                    raise ProviderAPIError(
+                        "Proxmox forbidden (HTTP 403). Grant the API token at least "
+                        "VM.Audit on the target guest (and Sys.Audit if listing nodes fails)."
+                    )
                 if resp.status >= 400:
                     raise ProviderAPIError(f"Proxmox HTTP {resp.status}: {text[:200]}")
                 try:
