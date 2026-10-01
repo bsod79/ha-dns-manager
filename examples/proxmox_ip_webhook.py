@@ -90,11 +90,23 @@ def _strip_cidr(value: str) -> str:
     return value.split("/", 1)[0].strip()
 
 
+def _usable(ip: str) -> bool:
+    lower = ip.lower()
+    if not ip or lower == "::1" or lower.startswith("127."):
+        return False
+    if lower.startswith("fe80:") or lower.startswith("169.254."):
+        return False
+    return True
+
+
 def ip_from_lxc(node: str, vmid: str, *, iface: str, family: str) -> str:
     data = pve_get(f"/api2/json/nodes/{node}/lxc/{vmid}/interfaces").get("data") or []
     key = "inet" if family == "ipv4" else "inet6"
     for row in data:
-        if iface and row.get("name") != iface:
+        name = row.get("name") or ""
+        if name in ("lo", "lo0"):
+            continue
+        if iface and name != iface:
             continue
         raw = row.get(key)
         if not raw:
@@ -103,7 +115,7 @@ def ip_from_lxc(node: str, vmid: str, *, iface: str, family: str) -> str:
         if isinstance(raw, list):
             raw = raw[0] if raw else ""
         ip = _strip_cidr(str(raw))
-        if ip and not ip.startswith("fe80:"):
+        if _usable(ip):
             return ip
     raise RuntimeError(f"No {family} on CT {vmid} (running? correct iface?)")
 
@@ -127,7 +139,7 @@ def ip_from_qemu(node: str, vmid: str, *, iface: str, family: str) -> str:
             if addr.get("ip-address-type") != wanted:
                 continue
             ip = str(addr.get("ip-address") or "").strip()
-            if ip and not ip.startswith("fe80:"):
+            if _usable(ip):
                 return ip
     raise RuntimeError(f"No {family} on VM {vmid} (guest agent running?)")
 

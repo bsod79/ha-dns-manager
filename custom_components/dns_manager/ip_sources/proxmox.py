@@ -31,9 +31,19 @@ def _strip_cidr(value: str) -> str:
     return value.split("/", 1)[0].strip()
 
 
+def _is_loopback(ip: str) -> bool:
+    lower = ip.lower()
+    return lower == "::1" or lower.startswith("127.")
+
+
 def _is_link_local(ip: str) -> bool:
     lower = ip.lower()
     return lower.startswith("fe80:") or lower.startswith("169.254.")
+
+
+def _is_usable_ip(ip: str) -> bool:
+    """True for addresses suitable as DNS targets (skip lo / link-local)."""
+    return bool(ip) and not _is_loopback(ip) and not _is_link_local(ip)
 
 
 class ProxmoxIpClient:
@@ -159,12 +169,15 @@ class ProxmoxIpClient:
         for row in data or []:
             if not isinstance(row, dict):
                 continue
-            if iface and str(row.get("name") or "") != iface:
+            name = str(row.get("name") or "")
+            if name in ("lo", "lo0"):
+                continue
+            if iface and name != iface:
                 continue
             raw = row.get(key)
             for candidate in _iter_addr_values(raw):
                 ip = _strip_cidr(candidate)
-                if ip and not _is_link_local(ip):
+                if _is_usable_ip(ip):
                     return ip
         raise IPDetectionError(
             f"No {family} on LXC {vmid}@{node} (running? correct iface?)"
@@ -195,7 +208,7 @@ class ProxmoxIpClient:
                 if str(addr.get("ip-address-type") or "") != wanted:
                     continue
                 ip = str(addr.get("ip-address") or "").strip()
-                if ip and not _is_link_local(ip):
+                if _is_usable_ip(ip):
                     return ip
         raise IPDetectionError(
             f"No {family} on VM {vmid}@{node} (guest agent installed and running?)"

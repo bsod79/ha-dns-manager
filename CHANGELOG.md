@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.8.4
+
+- Fix Proxmox empty interface filter picking `127.0.0.1` from `lo`: skip loopback interfaces and loopback addresses; prefer the first real NIC IP.
+
 ## 0.8.3
 
 - Proxmox IP source setup: default node is chosen from the API node list (dropdown), not typed by hand. Record attach already listed nodes/guests from the API.

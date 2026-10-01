@@ -351,7 +351,7 @@
               "proxmox_iface": "Interface filter (optional)"
             },
             "data_description": {
-              "proxmox_iface": "Leave empty to use the first non-link-local address. Example: eth0 or ens18."
+              "proxmox_iface": "Leave empty to use the first usable address (skips loopback and link-local). Example: eth0 or ens18."
             }
           }
         }

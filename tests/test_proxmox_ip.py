@@ -91,6 +91,7 @@ async def test_proxmox_client_lxc_ip():
         "_request",
         new=AsyncMock(
             return_value=[
+                {"name": "lo", "inet": "127.0.0.1/8", "inet6": "::1/128"},
                 {"name": "eth0", "inet": "10.0.0.50/24", "inet6": "fe80::1/64"},
             ]
         ),
