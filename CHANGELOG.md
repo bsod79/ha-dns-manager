@@ -1,5 +1,10 @@
 # Changelog
 
+## 0.8.3
+
+- Proxmox IP source setup: default node is chosen from the API node list (dropdown), not typed by hand. Record attach already listed nodes/guests from the API.
+- Per managed record: **IPv4** / **IPv6** sensors show the address currently on DNS (state), with `expected_*` in attributes. Created only when that address family is managed.
+
 ## 0.8.2
 
 - Fix invalid Proxmox VMID `_` saved when the guest list was empty (placeholder option). Empty lists now show an error instead of a fake guest.

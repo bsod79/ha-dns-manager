@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from typing import Any
+
 from homeassistant.components.sensor import SensorDeviceClass, SensorEntity
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.core import HomeAssistant
@@ -18,16 +20,17 @@ from .const import (
     CONF_PROVIDER_TYPE,
     CONF_RECORD_NAME,
     CONF_RECORDS,
-    CONF_RECORD_TYPE,
     CONF_STATIC_IP,
     CONF_STATIC_IPV6,
+    IP_MODE_AUTO,
+    IP_MODE_OFF,
     PROVIDER_LABELS,
     RECORD_STATUS_NOT_READY,
     RECORD_STATUS_OPTIONS,
     RECORD_STATUS_READY,
     RECORD_STATUS_UNKNOWN,
 )
-from .coordinator import DnsManagerCoordinator
+from .coordinator import DnsManagerCoordinator, RecordStatus
 from .entity_base import DnsManagerEntity
 from .options_model import is_ipv6_enabled
 from .providers.record_context import normalize_record, record_uid
@@ -49,8 +52,46 @@ async def async_setup_entry(
             continue
         uid = record_uid(rec)
         entities.append(ManagedRecordStatusSensor(coordinator, entry, uid))
+        ipv4_mode = str(rec.get(CONF_IP_MODE, IP_MODE_AUTO) or IP_MODE_AUTO)
+        if ipv4_mode != IP_MODE_OFF:
+            entities.append(ManagedRecordIpv4Sensor(coordinator, entry, uid))
+        ipv6_mode = str(rec.get(CONF_IPV6_MODE, IP_MODE_OFF) or IP_MODE_OFF)
+        if is_ipv6_enabled(entry) and ipv6_mode != IP_MODE_OFF:
+            entities.append(ManagedRecordIpv6Sensor(coordinator, entry, uid))
 
     async_add_entities(entities)
+
+
+class _ManagedRecordSensorBase(DnsManagerEntity, SensorEntity):
+    """Shared helpers for per-managed-record sensors."""
+
+    _attr_has_entity_name = False
+
+    def __init__(
+        self, coordinator: DnsManagerCoordinator, entry: ConfigEntry, record_uid_key: str
+    ) -> None:
+        super().__init__(coordinator, entry)
+        self.record_uid_key = record_uid_key
+
+    def _record_options_row(self) -> dict[str, Any] | None:
+        for rec in self.entry.options.get(CONF_RECORDS, []):
+            if record_uid(normalize_record(rec, self.entry)) == self.record_uid_key:
+                return normalize_record(rec, self.entry)
+        return None
+
+    def _display_name(self) -> str:
+        rs = self.coordinator.data.records.get(self.record_uid_key) if self.coordinator.data else None
+        row = self._record_options_row()
+        if rs:
+            return rs.name
+        if row:
+            return str(row.get(CONF_RECORD_NAME, self.record_uid_key))
+        return self.record_uid_key
+
+    def _record_status(self) -> RecordStatus | None:
+        if not self.coordinator.data:
+            return None
+        return self.coordinator.data.records.get(self.record_uid_key)
 
 
 class PublicIpSensor(DnsManagerEntity, SensorEntity):
@@ -93,30 +134,23 @@ class PublicIpv6Sensor(DnsManagerEntity, SensorEntity):
         return {"last_checked": self.coordinator.data.last_checked.isoformat()}
 
 
-class ManagedRecordStatusSensor(DnsManagerEntity, SensorEntity):
+class ManagedRecordStatusSensor(_ManagedRecordSensorBase):
     """ready / not_ready / unknown vs expected IP (ENUM for clear UI)."""
 
-    _attr_has_entity_name = False
     _attr_device_class = SensorDeviceClass.ENUM
     _attr_options = list(RECORD_STATUS_OPTIONS)
     _attr_translation_key = "record_status"
 
-    def __init__(self, coordinator: DnsManagerCoordinator, entry: ConfigEntry, record_uid_key: str) -> None:
-        super().__init__(coordinator, entry)
-        self.record_uid_key = record_uid_key
+    def __init__(
+        self, coordinator: DnsManagerCoordinator, entry: ConfigEntry, record_uid_key: str
+    ) -> None:
+        super().__init__(coordinator, entry, record_uid_key)
         self._attr_unique_id = f"dns_manager_{entry.entry_id}_{record_uid_key}_record_status"
-
-    def _record_options_row(self) -> dict | None:
-        for rec in self.entry.options.get(CONF_RECORDS, []):
-            if record_uid(normalize_record(rec, self.entry)) == self.record_uid_key:
-                return normalize_record(rec, self.entry)
-        return None
 
     @property
     def name(self) -> str | None:
-        rs = self.coordinator.data.records.get(self.record_uid_key) if self.coordinator.data else None
+        display = self._display_name()
         row = self._record_options_row()
-        display = rs.name if rs else (str(row.get(CONF_RECORD_NAME, self.record_uid_key)) if row else self.record_uid_key)
         provider = str(row.get(CONF_PROVIDER_TYPE, "")) if row else ""
         if provider:
             plabel = PROVIDER_LABELS.get(provider, provider)
@@ -125,9 +159,7 @@ class ManagedRecordStatusSensor(DnsManagerEntity, SensorEntity):
 
     @property
     def native_value(self) -> str:
-        if not self.coordinator.data:
-            return RECORD_STATUS_UNKNOWN
-        rs = self.coordinator.data.records.get(self.record_uid_key)
+        rs = self._record_status()
         if rs is None:
             return RECORD_STATUS_UNKNOWN
         # Unknown when we manage a family but have no expected address yet
@@ -149,7 +181,8 @@ class ManagedRecordStatusSensor(DnsManagerEntity, SensorEntity):
     @property
     def extra_state_attributes(self) -> dict[str, str] | None:
         row = self._record_options_row()
-        if not self.coordinator.data:
+        rs = self._record_status()
+        if rs is None:
             if not row:
                 return None
             return {
@@ -157,12 +190,6 @@ class ManagedRecordStatusSensor(DnsManagerEntity, SensorEntity):
                 "record_name": str(row.get(CONF_RECORD_NAME, "")),
                 "provider": str(row.get(CONF_PROVIDER_TYPE, "")),
                 "poll_status": "pending",
-            }
-        rs = self.coordinator.data.records.get(self.record_uid_key)
-        if not rs:
-            return {
-                "record_uid": self.record_uid_key,
-                "poll_status": "missing_status",
             }
         attrs: dict[str, str] = {
             "record_uid": rs.record_id,
@@ -191,3 +218,78 @@ class ManagedRecordStatusSensor(DnsManagerEntity, SensorEntity):
         if rs.last_updated:
             attrs["last_updated"] = rs.last_updated.isoformat()
         return attrs
+
+
+class ManagedRecordIpv4Sensor(_ManagedRecordSensorBase):
+    """Current A / IPv4 value on the managed DNS record."""
+
+    _attr_icon = "mdi:ip"
+
+    def __init__(
+        self, coordinator: DnsManagerCoordinator, entry: ConfigEntry, record_uid_key: str
+    ) -> None:
+        super().__init__(coordinator, entry, record_uid_key)
+        self._attr_unique_id = f"dns_manager_{entry.entry_id}_{record_uid_key}_ipv4"
+
+    @property
+    def name(self) -> str | None:
+        return f"{self._display_name()} IPv4"
+
+    @property
+    def native_value(self) -> str | None:
+        rs = self._record_status()
+        if rs is None:
+            return None
+        return rs.current_ip or None
+
+    @property
+    def extra_state_attributes(self) -> dict[str, str] | None:
+        rs = self._record_status()
+        if rs is None:
+            return {"record_uid": self.record_uid_key, "poll_status": "pending"}
+        attrs: dict[str, str] = {
+            "record_uid": rs.record_id,
+            "expected_ipv4": rs.expected_ip,
+            "in_sync": str(rs.in_sync),
+        }
+        if rs.last_updated:
+            attrs["last_updated"] = rs.last_updated.isoformat()
+        return attrs
+
+
+class ManagedRecordIpv6Sensor(_ManagedRecordSensorBase):
+    """Current AAAA / IPv6 value on the managed DNS record."""
+
+    _attr_icon = "mdi:ip-outline"
+
+    def __init__(
+        self, coordinator: DnsManagerCoordinator, entry: ConfigEntry, record_uid_key: str
+    ) -> None:
+        super().__init__(coordinator, entry, record_uid_key)
+        self._attr_unique_id = f"dns_manager_{entry.entry_id}_{record_uid_key}_ipv6"
+
+    @property
+    def name(self) -> str | None:
+        return f"{self._display_name()} IPv6"
+
+    @property
+    def native_value(self) -> str | None:
+        rs = self._record_status()
+        if rs is None:
+            return None
+        return rs.current_ipv6 or None
+
+    @property
+    def extra_state_attributes(self) -> dict[str, str] | None:
+        rs = self._record_status()
+        if rs is None:
+            return {"record_uid": self.record_uid_key, "poll_status": "pending"}
+        attrs: dict[str, str] = {
+            "record_uid": rs.record_id,
+            "expected_ipv6": rs.expected_ipv6,
+            "in_sync": str(rs.in_sync),
+        }
+        if rs.last_updated:
+            attrs["last_updated"] = rs.last_updated.isoformat()
+        return attrs
+

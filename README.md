@@ -62,6 +62,15 @@ Managed records   → Add record · Edit record · Remove record · Back
 
 Payload includes `config_entry_id`, `record_uid`, `record_name`, and IP fields where relevant.
 
+## Sensors
+
+| Sensor | State |
+|--------|--------|
+| Public IPv4 / IPv6 | Detected WAN address |
+| `{record} — {provider}` | `ready` / `not_ready` / `unknown` (in sync?) |
+| `{record} IPv4` | Current A value on DNS (`expected_ipv4` attribute) |
+| `{record} IPv6` | Current AAAA value when IPv6 is managed |
+
 ## Problem binary sensor
 
 One **Problem** binary sensor per instance: on when any managed record is out of sync. Attribute `out_of_sync_records` lists names.

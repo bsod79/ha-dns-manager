@@ -258,6 +258,7 @@ class DnsManagerOptionsFlow(config_entries.OptionsFlow):
         self._pve_node: str = ""
         self._pve_nodes: list[str] = []
         self._pve_guests: list[dict[str, str]] = []
+        self._pending_pve_config: dict[str, Any] | None = None
         self._flow_context: str = "add"  # add | edit
 
     def _load_state(self) -> None:
@@ -703,18 +704,17 @@ class DnsManagerOptionsFlow(config_entries.OptionsFlow):
                     CONF_PVE_TOKEN_ID: str(data[CONF_PVE_TOKEN_ID]).strip(),
                     CONF_PVE_TOKEN_SECRET: str(data[CONF_PVE_TOKEN_SECRET]).strip(),
                     CONF_PVE_VERIFY_SSL: bool(data.get(CONF_PVE_VERIFY_SSL, True)),
-                    CONF_PVE_DEFAULT_NODE: str(data.get(CONF_PVE_DEFAULT_NODE) or "").strip() or None,
+                    CONF_PVE_DEFAULT_NODE: None,
                 }
                 session = async_get_clientsession(self.hass)
                 client = proxmox_client_from_config(session, config)
                 await client.validate_credentials()
-                upsert_ip_source(
-                    self._ip_sources,
-                    source_type=IP_SOURCE_PROXMOX,
-                    name=default_proxmox_source_name(config),
-                    config=config,
-                )
-                return self._save()
+                try:
+                    self._pve_nodes = await client.list_nodes()
+                except Exception:  # noqa: BLE001
+                    self._pve_nodes = []
+                self._pending_pve_config = config
+                return await self.async_step_add_ip_source_proxmox_node()
             except ProviderAuthError:
                 errors["base"] = "invalid_auth"
             except ProviderAPIError:
@@ -731,10 +731,52 @@ class DnsManagerOptionsFlow(config_entries.OptionsFlow):
                     vol.Required(CONF_PVE_TOKEN_ID): str,
                     vol.Required(CONF_PVE_TOKEN_SECRET): str,
                     vol.Optional(CONF_PVE_VERIFY_SSL, default=True): bool,
-                    vol.Optional(CONF_PVE_DEFAULT_NODE, default=""): str,
                 },
             ),
             errors=errors,
+        )
+
+    async def async_step_add_ip_source_proxmox_node(
+        self, user_input: dict[str, Any] | None = None
+    ) -> FlowResult:
+        """Pick optional default node from API list (no manual typing)."""
+        if self._pending_pve_config is None:
+            return await self.async_step_add_ip_source_proxmox()
+
+        none_key = "__none__"
+        nodes_map = {none_key: "(no default)"}
+        for node in self._pve_nodes:
+            nodes_map[node] = node
+
+        if user_input is not None:
+            data = _from_section(user_input, "node")
+            chosen = str(data.get(CONF_PVE_DEFAULT_NODE) or none_key)
+            config = dict(self._pending_pve_config)
+            config[CONF_PVE_DEFAULT_NODE] = None if chosen == none_key else chosen
+            upsert_ip_source(
+                self._ip_sources,
+                source_type=IP_SOURCE_PROXMOX,
+                name=default_proxmox_source_name(config),
+                config=config,
+            )
+            self._pending_pve_config = None
+            self._pve_nodes = []
+            return self._save()
+
+        errors: dict[str, str] = {}
+        if not self._pve_nodes:
+            errors["base"] = "no_proxmox_nodes"
+
+        return self.async_show_form(
+            step_id="add_ip_source_proxmox_node",
+            data_schema=_sectioned(
+                "node",
+                {
+                    vol.Required(CONF_PVE_DEFAULT_NODE, default=none_key): vol.In(nodes_map),
+                },
+            ),
+            errors=errors,
+            description_placeholders={"nodes_count": str(len(self._pve_nodes))},
         )
 
     async def async_step_remove_ip_source_select(

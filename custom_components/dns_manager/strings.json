@@ -101,13 +101,26 @@
               "host": "Proxmox URL",
               "token_id": "Token ID (user@realm!tokenname)",
               "token_secret": "Token secret",
-              "verify_ssl": "Verify TLS certificate",
-              "default_node": "Default node (optional)"
+              "verify_ssl": "Verify TLS certificate"
             },
             "data_description": {
               "host": "Example: https://192.168.1.10:8006",
-              "token_id": "Full token id including user and token name.",
-              "default_node": "Pre-selected when attaching a guest to a record."
+              "token_id": "Full token id including user and token name."
+            }
+          }
+        }
+      },
+      "add_ip_source_proxmox_node": {
+        "title": "Add IP source — Default node",
+        "description": "Nodes from the Proxmox API ({nodes_count}). Optional default is pre-selected when attaching a guest to a record.",
+        "sections": {
+          "node": {
+            "name": "Node",
+            "data": {
+              "default_node": "Default node"
+            },
+            "data_description": {
+              "default_node": "Choose “(no default)” if you prefer to pick the node each time you add a record."
             }
           }
         }
