@@ -5,7 +5,7 @@
 Custom integration / integrazione custom per gestire record DNS **A/AAAA** da Home Assistant, con più provider e strategie IP flessibili.
 
 **Repository:** [github.com/bsod79/ha-dns-manager](https://github.com/bsod79/ha-dns-manager)  
-**Version / Versione:** see `custom_components/dns_manager/manifest.json` (currently **0.8.5**)
+**Version / Versione:** see `custom_components/dns_manager/manifest.json` (currently **0.8.6**)
 
 ---
 
@@ -129,7 +129,8 @@ IPv6 is **off by default**. Enable under **Options → General settings → Enab
 | `{record} — {provider}` | `ready` / `not_ready` / `unknown` (in sync?) |
 | `{record} IPv4` | Current A value on DNS (`expected_ipv4` in attributes) |
 | `{record} IPv6` | Current AAAA when IPv6 is managed |
-| Problem | On if any managed record is out of sync |
+| Problem | On if any managed record is out of sync (`mismatches`, `recent_issues`, public IP in attributes) |
+| Refresh public IP (button) | Re-detect WAN IP without writing DNS |
 
 ## Events (automations)
 
@@ -145,9 +146,10 @@ Payload includes `config_entry_id`, `record_uid`, `record_name`, and IP fields w
 
 | Service | Purpose |
 |---------|---------|
-| `dns_manager.update_all_records` | Force-update all managed records |
-| `dns_manager.update_record` | Force-update one record (optional IP overrides) |
+| `dns_manager.refresh_public_ip` | Re-detect public/WAN IP and refresh status (no DNS write) |
 | `dns_manager.refresh_status` | Re-poll status without writing |
+| `dns_manager.update_all_records` | Force-update all managed records (writes DNS) |
+| `dns_manager.update_record` | Force-update one record (optional IP overrides) |
 
 ## Example use cases
 
@@ -303,7 +305,8 @@ IPv6 è **disattivato di default**. Abilitalo in **Opzioni → General settings 
 | `{record} — {provider}` | `ready` / `not_ready` / `unknown` (in sync?) |
 | `{record} IPv4` | Valore A attuale sul DNS (`expected_ipv4` negli attributi) |
 | `{record} IPv6` | Valore AAAA quando IPv6 è gestito |
-| Problem | On se qualche managed record è out of sync |
+| Problem | On se qualche managed record è out of sync (`mismatches`, `recent_issues`, IP pubblico negli attributi) |
+| Refresh public IP (pulsante) | Ri-rileva l’IP WAN senza scrivere sul DNS |
 
 ## Eventi (automazioni)
 
@@ -319,9 +322,10 @@ Il payload include `config_entry_id`, `record_uid`, `record_name` e campi IP dov
 
 | Servizio | Scopo |
 |----------|--------|
-| `dns_manager.update_all_records` | Forza l’update di tutti i managed record |
-| `dns_manager.update_record` | Forza l’update di un record (override IP opzionali) |
+| `dns_manager.refresh_public_ip` | Ri-rileva l’IP pubblico/WAN e aggiorna lo stato (senza scrivere DNS) |
 | `dns_manager.refresh_status` | Rifà il poll senza scrivere |
+| `dns_manager.update_all_records` | Forza l’update di tutti i managed record (scrive sul DNS) |
+| `dns_manager.update_record` | Forza l’update di un record (override IP opzionali) |
 
 ## Esempi d’uso
 

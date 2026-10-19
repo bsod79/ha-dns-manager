@@ -172,6 +172,7 @@ RECORD_STATUS_OPTIONS: list[str] = [
 SERVICE_UPDATE_ALL = "update_all_records"
 SERVICE_UPDATE_RECORD = "update_record"
 SERVICE_REFRESH_STATUS = "refresh_status"
+SERVICE_REFRESH_PUBLIC_IP = "refresh_public_ip"
 
 ATTR_CONFIG_ENTRY_ID = "config_entry_id"
 ATTR_RECORD_NAME = "record_name"

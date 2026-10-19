@@ -4,22 +4,55 @@ update_all_records:
     config_entry_id:
       description: "Target integration instance (required if multiple entries exist)"
       required: false
+      example: "01ABCDEF..."
+      selector:
+        config_entry:
+          integration: dns_manager
 
 update_record:
   description: "Force update a single managed DNS record."
   fields:
+    config_entry_id:
+      description: "Target integration instance (required if multiple entries exist)"
+      required: false
+      selector:
+        config_entry:
+          integration: dns_manager
     record_name:
       description: "FQDN of the record, e.g. home.example.com"
       required: true
       example: "home.example.com"
+      selector:
+        text:
     ip_override:
       description: "Optional IPv4 override for this call only (does not persist)"
       required: false
       example: "1.2.3.4"
+      selector:
+        text:
     ipv6_override:
       description: "Optional IPv6 override for this call only (does not persist)"
       required: false
       example: "2001:db8::1"
+      selector:
+        text:
 
 refresh_status:
-  description: "Force a re-fetch of all record statuses without updating."
+  description: "Re-poll public IP and all record statuses without writing DNS."
+  fields:
+    config_entry_id:
+      description: "Target integration instance (required if multiple entries exist)"
+      required: false
+      selector:
+        config_entry:
+          integration: dns_manager
+
+refresh_public_ip:
+  description: "Re-detect public/WAN IPv4 (and IPv6 if enabled) and refresh record expected values. Does not write DNS."
+  fields:
+    config_entry_id:
+      description: "Target integration instance (required if multiple entries exist)"
+      required: false
+      selector:
+        config_entry:
+          integration: dns_manager

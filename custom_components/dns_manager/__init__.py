@@ -164,5 +164,11 @@ async def async_unload_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
 
     unload_ok = await hass.config_entries.async_unload_platforms(entry, PLATFORMS)
     if unload_ok:
-        await async_unregister_services(hass)
+        # Keep domain services registered while any other instance is still loaded.
+        still_loaded = any(
+            e.entry_id != entry.entry_id and getattr(e, "runtime_data", None) is not None
+            for e in hass.config_entries.async_entries(DOMAIN)
+        )
+        if not still_loaded:
+            await async_unregister_services(hass)
     return unload_ok

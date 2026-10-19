@@ -19,7 +19,11 @@ from .const import (
 from .coordinator import DnsManagerCoordinator
 from .entity_base import DnsManagerEntity
 from .providers.record_context import normalize_record, record_uid
-from .services import async_update_all_records, async_update_record_by_uid
+from .services import (
+    async_refresh_public_ip,
+    async_update_all_records,
+    async_update_record_by_uid,
+)
 
 
 async def async_setup_entry(
@@ -28,7 +32,10 @@ async def async_setup_entry(
     async_add_entities: AddEntitiesCallback,
 ) -> None:
     coordinator: DnsManagerCoordinator = entry.runtime_data.coordinator
-    entities: list[ButtonEntity] = [UpdateAllButton(coordinator, entry)]
+    entities: list[ButtonEntity] = [
+        RefreshPublicIpButton(coordinator, entry),
+        UpdateAllButton(coordinator, entry),
+    ]
 
     for rec_cfg in entry.options.get(CONF_RECORDS, []):
         rec = normalize_record(rec_cfg, entry)
@@ -38,6 +45,20 @@ async def async_setup_entry(
         entities.append(UpdateRecordButton(coordinator, entry, uid))
 
     async_add_entities(entities)
+
+
+class RefreshPublicIpButton(DnsManagerEntity, ButtonEntity):
+    _attr_has_entity_name = False
+    _attr_entity_category = EntityCategory.DIAGNOSTIC
+    _attr_name = "Refresh public IP"
+    _attr_icon = "mdi:ip-network"
+
+    def __init__(self, coordinator: DnsManagerCoordinator, entry: ConfigEntry) -> None:
+        super().__init__(coordinator, entry)
+        self._attr_unique_id = f"dns_manager_{entry.entry_id}_refresh_public_ip"
+
+    async def async_press(self) -> None:
+        await async_refresh_public_ip(self.coordinator)
 
 
 class UpdateAllButton(DnsManagerEntity, ButtonEntity):

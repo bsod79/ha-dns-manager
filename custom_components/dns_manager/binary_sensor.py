@@ -44,8 +44,40 @@ class DnsManagerProblemSensor(DnsManagerEntity, BinarySensorEntity):
     def extra_state_attributes(self) -> dict[str, object] | None:
         if not self.coordinator.data:
             return None
-        out = [rs.name for rs in self.coordinator.data.records.values() if not rs.in_sync]
+
+        mismatches: list[dict[str, str]] = []
+        for rs in self.coordinator.data.records.values():
+            if rs.in_sync:
+                continue
+            row: dict[str, str] = {"name": rs.name, "provider": rs.provider_type or ""}
+            if rs.expected_ip or rs.current_ip:
+                row["expected_ipv4"] = rs.expected_ip
+                row["current_ipv4"] = rs.current_ip
+            if rs.expected_ipv6 or rs.current_ipv6:
+                row["expected_ipv6"] = rs.expected_ipv6
+                row["current_ipv6"] = rs.current_ipv6
+            mismatches.append(row)
+
+        recent_issues: list[dict[str, object]] = []
+        for entry in reversed(self.coordinator.activity_log.as_list()):
+            if entry.get("level") not in ("warning", "error"):
+                continue
+            recent_issues.append(
+                {
+                    "timestamp": entry.get("timestamp"),
+                    "level": entry.get("level"),
+                    "message": entry.get("message"),
+                    "details": entry.get("details"),
+                }
+            )
+            if len(recent_issues) >= 5:
+                break
+
         return {
-            "out_of_sync_records": out,
+            "out_of_sync_records": [m["name"] for m in mismatches],
+            "mismatches": mismatches,
+            "public_ipv4": self.coordinator.data.public_ip or None,
+            "public_ipv6": self.coordinator.data.public_ipv6 or None,
             "last_checked": self.coordinator.data.last_checked.isoformat(),
+            "recent_issues": recent_issues,
         }

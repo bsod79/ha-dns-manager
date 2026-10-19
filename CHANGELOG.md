@@ -1,5 +1,12 @@
 # Changelog
 
+## 0.8.6
+
+- Action / button **Refresh public IP** (`dns_manager.refresh_public_ip`): re-detect WAN IPv4/IPv6 and refresh status without writing DNS.
+- **Problem** sensor attributes now include `mismatches` (expected vs current per record), `public_ipv4`/`public_ipv6`, and `recent_issues` from the activity log.
+- Diagnostics download highlights `problems` and `recent_issues` at the top (easier than digging the full activity log).
+- Unloading one of multiple DNS Manager instances no longer removes services for the others.
+
 ## 0.8.5
 
 - **From entity**: pick any entity, optional attribute name (e.g. `ip` / `ip_address`). Empty attribute = use state. No more sensor-only filter.

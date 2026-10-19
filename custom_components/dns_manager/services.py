@@ -22,6 +22,7 @@ from .const import (
     DOMAIN,
     EVENT_RECORD_SYNCED,
     EVENT_SYNC_ERROR,
+    SERVICE_REFRESH_PUBLIC_IP,
     SERVICE_REFRESH_STATUS,
     SERVICE_UPDATE_ALL,
     SERVICE_UPDATE_RECORD,
@@ -60,12 +61,21 @@ async def async_register_services(hass: HomeAssistant) -> None:
         for entry in hass.config_entries.async_entries(DOMAIN):
             if entry_id and entry.entry_id != entry_id:
                 continue
-            coords.append(entry.runtime_data.coordinator)
+            runtime = getattr(entry, "runtime_data", None)
+            if runtime is None:
+                continue
+            coords.append(runtime.coordinator)
+        if not coords:
+            raise HomeAssistantError("No loaded DNS Manager instance found")
         return coords
 
     async def handle_refresh(call: ServiceCall) -> None:
         for coord in await _get_target_coordinators(call):
             await coord.async_request_refresh()
+
+    async def handle_refresh_public_ip(call: ServiceCall) -> None:
+        for coord in await _get_target_coordinators(call):
+            await async_refresh_public_ip(coord)
 
     async def handle_update_all(call: ServiceCall) -> None:
         for coord in await _get_target_coordinators(call):
@@ -88,14 +98,33 @@ async def async_register_services(hass: HomeAssistant) -> None:
             )
 
     hass.services.async_register(DOMAIN, SERVICE_REFRESH_STATUS, handle_refresh)
+    hass.services.async_register(DOMAIN, SERVICE_REFRESH_PUBLIC_IP, handle_refresh_public_ip)
     hass.services.async_register(DOMAIN, SERVICE_UPDATE_ALL, handle_update_all)
     hass.services.async_register(DOMAIN, SERVICE_UPDATE_RECORD, handle_update_record)
 
 
 async def async_unregister_services(hass: HomeAssistant) -> None:
-    for name in (SERVICE_REFRESH_STATUS, SERVICE_UPDATE_ALL, SERVICE_UPDATE_RECORD):
+    for name in (
+        SERVICE_REFRESH_STATUS,
+        SERVICE_REFRESH_PUBLIC_IP,
+        SERVICE_UPDATE_ALL,
+        SERVICE_UPDATE_RECORD,
+    ):
         if hass.services.has_service(DOMAIN, name):
             hass.services.async_remove(DOMAIN, name)
+
+
+async def async_refresh_public_ip(coord: DnsManagerCoordinator) -> None:
+    """Force re-detection of public IP(s) and refresh expected/current record status."""
+    coord.activity_log.info("Refreshing public IP detection")
+    await coord.async_request_refresh()
+    public_ip = coord.data.public_ip if coord.data else None
+    public_ipv6 = coord.data.public_ipv6 if coord.data else None
+    coord.activity_log.info(
+        "Public IP refresh complete",
+        public_ipv4=public_ip or None,
+        public_ipv6=public_ipv6 or None,
+    )
 
 
 async def _async_expected(

@@ -66,6 +66,7 @@ async def async_get_config_entry_diagnostics(hass: HomeAssistant, entry: ConfigE
         "write_cooldown": int(entry.options.get(CONF_WRITE_COOLDOWN, 300)),
     }
 
+    problems: list[dict[str, Any]] = []
     if coordinator.data:
         coordinator_snapshot["public_ip"] = coordinator.data.public_ip
         coordinator_snapshot["public_ipv6"] = coordinator.data.public_ipv6
@@ -83,6 +84,28 @@ async def async_get_config_entry_diagnostics(hass: HomeAssistant, entry: ConfigE
             }
             for record_id, rs in coordinator.data.records.items()
         }
+        for rs in coordinator.data.records.values():
+            if rs.in_sync:
+                continue
+            problems.append(
+                {
+                    "name": rs.name,
+                    "provider": rs.provider_type,
+                    "expected_ipv4": rs.expected_ip,
+                    "current_ipv4": rs.current_ip,
+                    "expected_ipv6": rs.expected_ipv6,
+                    "current_ipv6": rs.current_ipv6,
+                    "summary": (
+                        f"{rs.name}: DNS has "
+                        f"A={rs.current_ip or '-'} AAAA={rs.current_ipv6 or '-'}; "
+                        f"expected A={rs.expected_ip or '-'} AAAA={rs.expected_ipv6 or '-'}"
+                    ),
+                }
+            )
+
+    recent_issues = [
+        e for e in activity_log.as_list() if e.get("level") in ("warning", "error")
+    ][-20:]
 
     return {
         "domain": DOMAIN,
@@ -104,11 +127,16 @@ async def async_get_config_entry_diagnostics(hass: HomeAssistant, entry: ConfigE
             CONF_IP_SOURCES: async_redact_data(entry.options.get(CONF_IP_SOURCES, []), REDACT_KEYS),
             CONF_RECORDS: async_redact_data(entry.options.get(CONF_RECORDS, []), REDACT_KEYS),
         },
+        "problems": problems,
+        "recent_issues": recent_issues,
         "coordinator": coordinator_snapshot,
         "activity_log": activity_log.as_list(),
         "note": (
+            "Look at 'problems' for expected vs DNS mismatches, and 'recent_issues' / "
+            "'activity_log' for detection or provider errors. "
             "Polling checks sync every scan_interval seconds. "
             "DNS is updated when auto_sync / sync_on_start is enabled or via Update buttons/services. "
+            "Use refresh_public_ip to re-detect WAN IP without writing DNS. "
             "write_cooldown applies to automatic writes only."
         ),
     }
