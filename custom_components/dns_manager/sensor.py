@@ -109,14 +109,18 @@ class PublicIpSensor(DnsManagerEntity, SensorEntity):
         return self.coordinator.data.public_ip if self.coordinator.data else None
 
     @property
-    def extra_state_attributes(self) -> dict[str, str] | None:
+    def extra_state_attributes(self) -> dict[str, object] | None:
         if not self.coordinator.data:
             return None
-        attrs: dict[str, str] = {
+        attrs: dict[str, object] = {
             "last_checked": self.coordinator.data.last_checked.isoformat(),
         }
         if self.coordinator.data.public_ip_source:
             attrs["detection_url"] = self.coordinator.data.public_ip_source
+        if self.coordinator.data.public_ip_raw:
+            attrs["raw_body"] = self.coordinator.data.public_ip_raw
+        if self.coordinator.data.public_ip_attempts:
+            attrs["attempts"] = self.coordinator.data.public_ip_attempts
         return attrs
 
 
@@ -135,14 +139,18 @@ class PublicIpv6Sensor(DnsManagerEntity, SensorEntity):
         return self.coordinator.data.public_ipv6 or None
 
     @property
-    def extra_state_attributes(self) -> dict[str, str] | None:
+    def extra_state_attributes(self) -> dict[str, object] | None:
         if not self.coordinator.data:
             return None
-        attrs: dict[str, str] = {
+        attrs: dict[str, object] = {
             "last_checked": self.coordinator.data.last_checked.isoformat(),
         }
         if self.coordinator.data.public_ipv6_source:
             attrs["detection_url"] = self.coordinator.data.public_ipv6_source
+        if self.coordinator.data.public_ipv6_raw:
+            attrs["raw_body"] = self.coordinator.data.public_ipv6_raw
+        if self.coordinator.data.public_ipv6_attempts:
+            attrs["attempts"] = self.coordinator.data.public_ipv6_attempts
         return attrs
 
 

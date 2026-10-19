@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.8.8
+
+- Public IP detection traces: sensor attributes / activity log / diagnostics include `raw_body` from the provider response and every `attempts[]` (url, http status, raw, error). Also logged to HA log at INFO/WARNING (`custom_components.dns_manager.utils.ip_detection`).
+
 ## 0.8.7
 
 - Fix public IP detection for JSON endpoints (ipify, etc.): parse the response text with `json.loads` instead of calling `.json()` after `.text()` (which silently failed and fell back to another service).

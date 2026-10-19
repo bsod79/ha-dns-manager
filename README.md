@@ -5,7 +5,7 @@
 Custom integration / integrazione custom per gestire record DNS **A/AAAA** da Home Assistant, con più provider e strategie IP flessibili.
 
 **Repository:** [github.com/bsod79/ha-dns-manager](https://github.com/bsod79/ha-dns-manager)  
-**Version / Versione:** see `custom_components/dns_manager/manifest.json` (currently **0.8.7**)
+**Version / Versione:** see `custom_components/dns_manager/manifest.json` (currently **0.8.8**)
 
 ---
 

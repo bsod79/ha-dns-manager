@@ -70,8 +70,12 @@ async def async_get_config_entry_diagnostics(hass: HomeAssistant, entry: ConfigE
     if coordinator.data:
         coordinator_snapshot["public_ip"] = coordinator.data.public_ip
         coordinator_snapshot["public_ip_source"] = coordinator.data.public_ip_source
+        coordinator_snapshot["public_ip_raw"] = coordinator.data.public_ip_raw
+        coordinator_snapshot["public_ip_attempts"] = coordinator.data.public_ip_attempts
         coordinator_snapshot["public_ipv6"] = coordinator.data.public_ipv6
         coordinator_snapshot["public_ipv6_source"] = coordinator.data.public_ipv6_source
+        coordinator_snapshot["public_ipv6_raw"] = coordinator.data.public_ipv6_raw
+        coordinator_snapshot["public_ipv6_attempts"] = coordinator.data.public_ipv6_attempts
         coordinator_snapshot["last_checked"] = coordinator.data.last_checked.isoformat()
         coordinator_snapshot["records"] = {
             record_id: {

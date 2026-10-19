@@ -68,6 +68,10 @@ class CoordinatorData:
     last_checked: datetime
     public_ip_source: str = ""
     public_ipv6_source: str = ""
+    public_ip_raw: str = ""
+    public_ipv6_raw: str = ""
+    public_ip_attempts: list[dict[str, object]] | None = None
+    public_ipv6_attempts: list[dict[str, object]] | None = None
 
 
 def _family_in_sync(expected: str | None, current: str) -> bool:
@@ -156,13 +160,40 @@ class DnsManagerCoordinator(DataUpdateCoordinator[CoordinatorData]):
         public_ipv6 = ""
         public_ip_source = ""
         public_ipv6_source = ""
+        public_ip_raw = ""
+        public_ipv6_raw = ""
+        public_ip_attempts: list[dict[str, object]] = []
+        public_ipv6_attempts: list[dict[str, object]] = []
         public_ip_error: str | None = None
         public_ipv6_error: str | None = None
+
+        def _attempts_as_dicts(detected) -> list[dict[str, object]]:
+            return [
+                {
+                    "url": a.url,
+                    "ok": a.ok,
+                    "http_status": a.http_status,
+                    "raw_body": a.raw_body,
+                    "ip": a.ip,
+                    "error": a.error,
+                }
+                for a in detected.attempts
+            ]
 
         try:
             detected_v4 = await detect_public_ip(session, primary_url=str(ip_url))
             public_ip = detected_v4.ip
             public_ip_source = detected_v4.source_url
+            public_ip_raw = detected_v4.raw_body
+            public_ip_attempts = _attempts_as_dicts(detected_v4)
+            self.activity_log.info(
+                "Public IPv4 detected",
+                ip=public_ip,
+                detection_url=public_ip_source,
+                raw_body=public_ip_raw,
+                http_status=detected_v4.http_status,
+                attempts=public_ip_attempts,
+            )
         except DNSManagerError as err:
             public_ip_error = str(err)
             self.activity_log.warning("Public IPv4 detection failed", error=public_ip_error)
@@ -172,6 +203,16 @@ class DnsManagerCoordinator(DataUpdateCoordinator[CoordinatorData]):
                 detected_v6 = await detect_public_ipv6(session, primary_url=ipv6_url)
                 public_ipv6 = detected_v6.ip
                 public_ipv6_source = detected_v6.source_url
+                public_ipv6_raw = detected_v6.raw_body
+                public_ipv6_attempts = _attempts_as_dicts(detected_v6)
+                self.activity_log.info(
+                    "Public IPv6 detected",
+                    ip=public_ipv6,
+                    detection_url=public_ipv6_source,
+                    raw_body=public_ipv6_raw,
+                    http_status=detected_v6.http_status,
+                    attempts=public_ipv6_attempts,
+                )
             except DNSManagerError as err:
                 public_ipv6_error = str(err)
                 self.activity_log.warning("Public IPv6 detection failed", error=public_ipv6_error)
@@ -277,6 +318,10 @@ class DnsManagerCoordinator(DataUpdateCoordinator[CoordinatorData]):
             last_checked=now,
             public_ip_source=public_ip_source,
             public_ipv6_source=public_ipv6_source,
+            public_ip_raw=public_ip_raw,
+            public_ipv6_raw=public_ipv6_raw,
+            public_ip_attempts=public_ip_attempts or None,
+            public_ipv6_attempts=public_ipv6_attempts or None,
         )
         self._fire_out_of_sync_edges(records_out)
         await self._async_auto_sync_records(data)

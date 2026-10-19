@@ -122,12 +122,17 @@ async def async_refresh_public_ip(coord: DnsManagerCoordinator) -> None:
     public_ipv6 = coord.data.public_ipv6 if coord.data else None
     public_ip_source = coord.data.public_ip_source if coord.data else None
     public_ipv6_source = coord.data.public_ipv6_source if coord.data else None
+    public_ip_raw = coord.data.public_ip_raw if coord.data else None
+    public_ipv6_raw = coord.data.public_ipv6_raw if coord.data else None
     coord.activity_log.info(
         "Public IP refresh complete",
         public_ipv4=public_ip or None,
         public_ipv4_source=public_ip_source or None,
+        public_ipv4_raw=public_ip_raw or None,
+        public_ipv4_attempts=coord.data.public_ip_attempts if coord.data else None,
         public_ipv6=public_ipv6 or None,
         public_ipv6_source=public_ipv6_source or None,
+        public_ipv6_raw=public_ipv6_raw or None,
     )
 
 
