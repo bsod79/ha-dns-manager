@@ -112,7 +112,12 @@ class PublicIpSensor(DnsManagerEntity, SensorEntity):
     def extra_state_attributes(self) -> dict[str, str] | None:
         if not self.coordinator.data:
             return None
-        return {"last_checked": self.coordinator.data.last_checked.isoformat()}
+        attrs: dict[str, str] = {
+            "last_checked": self.coordinator.data.last_checked.isoformat(),
+        }
+        if self.coordinator.data.public_ip_source:
+            attrs["detection_url"] = self.coordinator.data.public_ip_source
+        return attrs
 
 
 class PublicIpv6Sensor(DnsManagerEntity, SensorEntity):
@@ -133,7 +138,12 @@ class PublicIpv6Sensor(DnsManagerEntity, SensorEntity):
     def extra_state_attributes(self) -> dict[str, str] | None:
         if not self.coordinator.data:
             return None
-        return {"last_checked": self.coordinator.data.last_checked.isoformat()}
+        attrs: dict[str, str] = {
+            "last_checked": self.coordinator.data.last_checked.isoformat(),
+        }
+        if self.coordinator.data.public_ipv6_source:
+            attrs["detection_url"] = self.coordinator.data.public_ipv6_source
+        return attrs
 
 
 class ManagedRecordStatusSensor(_ManagedRecordSensorBase):

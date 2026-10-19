@@ -1,5 +1,10 @@
 # Changelog
 
+## 0.8.7
+
+- Fix public IP detection for JSON endpoints (ipify, etc.): parse the response text with `json.loads` instead of calling `.json()` after `.text()` (which silently failed and fell back to another service).
+- Public IPv4/IPv6 sensors show `detection_url` so you can see which service returned the address.
+
 ## 0.8.6
 
 - Action / button **Refresh public IP** (`dns_manager.refresh_public_ip`): re-detect WAN IPv4/IPv6 and refresh status without writing DNS.

@@ -73,15 +73,16 @@ async def test_resolve_expected_ip_from_url():
 async def test_detect_ip_from_url_json():
     resp = MagicMock()
     resp.status = 200
+    # Real aiohttp often cannot call .json() after .text(); parser must use the text body.
     resp.text = AsyncMock(return_value='{"ip":"1.1.1.1"}')
-    resp.json = AsyncMock(return_value={"ip": "1.1.1.1"})
+    resp.json = AsyncMock(side_effect=RuntimeError("body already read"))
     cm = MagicMock()
     cm.__aenter__ = AsyncMock(return_value=resp)
     cm.__aexit__ = AsyncMock(return_value=None)
     session = MagicMock()
     session.get = MagicMock(return_value=cm)
 
-    assert await detect_ip_from_url(session, "https://example.com/ip") == "1.1.1.1"
+    assert await detect_ip_from_url(session, "https://api.ipify.org?format=json") == "1.1.1.1"
 
 
 @pytest.mark.asyncio
@@ -89,7 +90,6 @@ async def test_detect_ip_from_url_invalid():
     resp = MagicMock()
     resp.status = 200
     resp.text = AsyncMock(return_value="not-an-ip")
-    resp.json = AsyncMock(side_effect=ValueError("no json"))
     cm = MagicMock()
     cm.__aenter__ = AsyncMock(return_value=resp)
     cm.__aexit__ = AsyncMock(return_value=None)

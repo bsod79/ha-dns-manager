@@ -66,6 +66,8 @@ class CoordinatorData:
     public_ipv6: str
     records: dict[str, RecordStatus]
     last_checked: datetime
+    public_ip_source: str = ""
+    public_ipv6_source: str = ""
 
 
 def _family_in_sync(expected: str | None, current: str) -> bool:
@@ -152,18 +154,24 @@ class DnsManagerCoordinator(DataUpdateCoordinator[CoordinatorData]):
         session = async_get_clientsession(self.hass)
         public_ip = ""
         public_ipv6 = ""
+        public_ip_source = ""
+        public_ipv6_source = ""
         public_ip_error: str | None = None
         public_ipv6_error: str | None = None
 
         try:
-            public_ip = await detect_public_ip(session, primary_url=str(ip_url))
+            detected_v4 = await detect_public_ip(session, primary_url=str(ip_url))
+            public_ip = detected_v4.ip
+            public_ip_source = detected_v4.source_url
         except DNSManagerError as err:
             public_ip_error = str(err)
             self.activity_log.warning("Public IPv4 detection failed", error=public_ip_error)
 
         if ipv6_url:
             try:
-                public_ipv6 = await detect_public_ipv6(session, primary_url=ipv6_url)
+                detected_v6 = await detect_public_ipv6(session, primary_url=ipv6_url)
+                public_ipv6 = detected_v6.ip
+                public_ipv6_source = detected_v6.source_url
             except DNSManagerError as err:
                 public_ipv6_error = str(err)
                 self.activity_log.warning("Public IPv6 detection failed", error=public_ipv6_error)
@@ -267,6 +275,8 @@ class DnsManagerCoordinator(DataUpdateCoordinator[CoordinatorData]):
             public_ipv6=public_ipv6,
             records=records_out,
             last_checked=now,
+            public_ip_source=public_ip_source,
+            public_ipv6_source=public_ipv6_source,
         )
         self._fire_out_of_sync_edges(records_out)
         await self._async_auto_sync_records(data)
@@ -275,7 +285,9 @@ class DnsManagerCoordinator(DataUpdateCoordinator[CoordinatorData]):
         self.activity_log.info(
             "Poll complete",
             public_ip=public_ip or None,
+            public_ip_source=public_ip_source or None,
             public_ipv6=public_ipv6 or None,
+            public_ipv6_source=public_ipv6_source or None,
             public_ip_error=public_ip_error,
             public_ipv6_error=public_ipv6_error,
             records_checked=len(data.records),
