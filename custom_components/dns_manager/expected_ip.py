@@ -62,6 +62,28 @@ def _mode(rec_cfg: dict[str, Any], key: str, default: str) -> str:
     return str(rec_cfg.get(key, default) or default)
 
 
+def managed_families(
+    rec_cfg: dict[str, Any], *, ipv6_enabled: bool
+) -> tuple[bool, bool]:
+    """Return (manage_ipv4, manage_ipv6) from the record strategy."""
+    manage_v4 = _mode(rec_cfg, CONF_IP_MODE, IP_MODE_AUTO) != IP_MODE_OFF
+    if not ipv6_enabled:
+        return manage_v4, False
+    manage_v6 = _mode(rec_cfg, CONF_IPV6_MODE, IP_MODE_OFF) != IP_MODE_OFF
+    return manage_v4, manage_v6
+
+
+def empty_expected_for_managed(
+    rec_cfg: dict[str, Any], *, ipv6_enabled: bool
+) -> ExpectedAddresses:
+    """Placeholder expected values when resolution fails (managed → '', off → None)."""
+    manage_v4, manage_v6 = managed_families(rec_cfg, ipv6_enabled=ipv6_enabled)
+    return ExpectedAddresses(
+        ipv4="" if manage_v4 else None,
+        ipv6="" if manage_v6 else None,
+    )
+
+
 def _parse_ip(raw: str, *, family: str) -> str:
     try:
         if family == "ipv4":
@@ -168,7 +190,14 @@ async def resolve_expected_addresses(
             ipv4 = value  # may be ""
         elif mode == IP_MODE_URL:
             url = str(rec_cfg.get(CONF_IP_URL, "") or "").strip()
-            ipv4 = await detect_ip_from_url(session, url, family="ipv4") if url else ""
+            if not url:
+                ipv4 = ""
+            else:
+                try:
+                    ipv4 = await detect_ip_from_url(session, url, family="ipv4")
+                except IPDetectionError as err:
+                    _LOGGER.warning("IPv4 URL detection failed: %s", err)
+                    ipv4 = ""
         elif mode == IP_MODE_ENTITY:
             ipv4 = _ip_from_entity(
                 hass,
@@ -198,7 +227,14 @@ async def resolve_expected_addresses(
             ipv6 = value
         elif mode6 == IP_MODE_URL:
             url = str(rec_cfg.get(CONF_IPV6_URL, "") or "").strip()
-            ipv6 = await detect_ip_from_url(session, url, family="ipv6") if url else ""
+            if not url:
+                ipv6 = ""
+            else:
+                try:
+                    ipv6 = await detect_ip_from_url(session, url, family="ipv6")
+                except IPDetectionError as err:
+                    _LOGGER.warning("IPv6 URL detection failed: %s", err)
+                    ipv6 = ""
         elif mode6 == IP_MODE_ENTITY:
             ipv6 = _ip_from_entity(
                 hass,

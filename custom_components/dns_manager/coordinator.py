@@ -32,7 +32,7 @@ from .const import (
     TRIGGER_AUTO,
 )
 from .exceptions import DNSManagerError, IPDetectionError, ProviderAuthError
-from .expected_ip import resolve_expected_addresses
+from .expected_ip import empty_expected_for_managed, resolve_expected_addresses
 from .options_model import is_ipv6_enabled
 from .providers import get_provider_for_record
 from .providers.record_context import (
@@ -75,11 +75,24 @@ class CoordinatorData:
 
 
 def _family_in_sync(expected: str | None, current: str) -> bool:
+    """Compare one address family. expected=None means that family is not managed."""
     if expected is None:
-        return True  # not managed
+        return True  # not managed — ignore DNS value for this family
     if not expected:
-        return False
-    return current.lower() == expected.lower()
+        return False  # managed but expected unknown/failed → out of sync
+    return bool(current) and current.lower() == expected.lower()
+
+
+def _record_in_sync(
+    expected_v4: str | None,
+    expected_v6: str | None,
+    current_v4: str,
+    current_v6: str,
+) -> bool:
+    """Sync status only for families enabled on this record's strategy."""
+    return _family_in_sync(expected_v4, current_v4) and _family_in_sync(
+        expected_v6, current_v6
+    )
 
 
 class DnsManagerCoordinator(DataUpdateCoordinator[CoordinatorData]):
@@ -242,6 +255,10 @@ class DnsManagerCoordinator(DataUpdateCoordinator[CoordinatorData]):
                 expected_v4 = expected.ipv4
                 expected_v6 = expected.ipv6
             except IPDetectionError as err:
+                # Must not treat failure as "family off" (None → false in-sync).
+                fallback = empty_expected_for_managed(rec_cfg, ipv6_enabled=ipv6_on)
+                expected_v4 = fallback.ipv4
+                expected_v6 = fallback.ipv6
                 self.activity_log.warning(
                     "Expected IP resolution failed",
                     record=record_name,
@@ -262,21 +279,17 @@ class DnsManagerCoordinator(DataUpdateCoordinator[CoordinatorData]):
                     record_id=provider_record_id(rec_cfg),
                     record_id_aaaa=provider_record_id_aaaa(rec_cfg),
                 )
-                in_sync = _family_in_sync(expected_v4, addresses.ipv4) and _family_in_sync(
-                    expected_v6, addresses.ipv6
-                )
-                # Unknown if we manage a family but have neither expected nor current
-                if (expected_v4 is not None and not expected_v4 and not addresses.ipv4) or (
-                    expected_v6 is not None and not expected_v6 and not addresses.ipv6
-                ):
-                    in_sync = False
+                # Only surface DNS values for families this record actually manages.
+                current_v4 = addresses.ipv4 if expected_v4 is not None else ""
+                current_v6 = addresses.ipv6 if expected_v6 is not None else ""
+                in_sync = _record_in_sync(expected_v4, expected_v6, current_v4, current_v6)
 
                 records_out[uid] = RecordStatus(
                     record_id=uid,
                     name=record_name,
-                    current_ip=addresses.ipv4,
+                    current_ip=current_v4,
                     expected_ip=expected_v4 or "",
-                    current_ipv6=addresses.ipv6,
+                    current_ipv6=current_v6,
                     expected_ipv6=expected_v6 or "",
                     in_sync=in_sync,
                     last_updated=last_updated,

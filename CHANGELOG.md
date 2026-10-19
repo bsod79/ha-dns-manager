@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.8.9
+
+- Fix sync status: failed expected-IP resolution no longer counts as “family off” (which wrongly showed **in sync**). Out-of-sync now only considers address families enabled on that record’s strategy; unmanaged families are ignored.
+
 ## 0.8.8
 
 - Public IP detection traces: sensor attributes / activity log / diagnostics include `raw_body` from the provider response and every `attempts[]` (url, http status, raw, error). Also logged to HA log at INFO/WARNING (`custom_components.dns_manager.utils.ip_detection`).
